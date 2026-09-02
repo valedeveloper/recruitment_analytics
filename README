@@ -1,0 +1,409 @@
+# Candidate Recruitment Analytics — Data Warehouse & ETL Project
+
+## 1. Project Objective
+
+Implement a data pipeline model from business requirements to a data warehouse for analyzing the recruitment process in a company.
+
+## 2. Business Context
+
+A technology recruitment company wants to improve its understanding of its candidate selection process. The company receives thousands of applications from candidates with different professional backgrounds, levels of experience, countries, seniority levels, and technology profiles.
+
+Candidate performance is evaluated through two technical assessments:
+
+- **Code Challenge Score**
+- **Technical Interview Score**
+
+Currently, candidate application data is only available as raw files. The organization needs an analytical system that allows decision-makers to understand hiring patterns and evaluate recruitment performance from multiple perspectives (time, technology, seniority, geography, and gender).
+
+**Hiring Outcome Business Rule**
+
+A candidate is considered **HIRED** when:
+
+> `Code Challenge Score ≥ 7` **AND** `Technical Interview Score ≥ 7`
+
+Otherwise, the candidate is **NOT HIRED**.
+
+## 3. Business Requirements
+
+| # | Requirement | Description |
+|---|---|---|
+| R1 | Hiring trends over time | Monitor hiring trends over time to identify changes in recruitment outcomes. The system must allow analysts to study hiring behavior across different periods. |
+| R2 | Technology analysis | Compare hiring outcomes across different technologies to identify which technical profiles generate the highest number and proportion of hired candidates. |
+| R3 | Candidate profile analysis | Analyze hiring outcomes based on candidate seniority and years of professional experience (YOE) to identify differences in recruitment results across candidate profiles. |
+| R4 | Technical performance analysis | Analyze candidate performance in the Code Challenge and Technical Interview based on years of experience and country of origin, to identify differences in technical performance across experience levels and geographic regions. |
+| R5 | Evaluation gap analysis | Identify relevant differences between Code Challenge and Technical Interview results to detect profiles whose performance varies between evaluation stages. |
+
+> **Additional (bonus) requirement:** Analyze hiring trends and proportions based on estimated gender (derived from candidate first name), to identify possible differences in selection outcomes across gender groups.
+
+## 4. Requirements Traceability
+
+| Requirement | Required Dimension(s) | Required Measure(s) | Supported? |
+|---|---|---|---|
+| R1 | DimDate | cantidad_contrataciones (hires count) | ✅ Yes |
+| R2 | DimTechnology | proporcion_contratados (hiring rate) | ✅ Yes |
+| R3 | DimSeniority | cantidad_contrataciones (hires count) | ✅ Yes |
+| R4 | DimCountry | cantidad_contrataciones (hires count) | ✅ Yes |
+| R5 | DimCandidate | cantidad_contrataciones (hires count) | ✅ Yes |
+
+## 5. Dataset Description
+
+The source dataset contains approximately **50,000 candidate applications**. Each row represents one candidate application.
+
+| Attribute | Description |
+|---|---|
+| First Name | Candidate's first name |
+| Last Name | Candidate's last name |
+| Email | Candidate's email address |
+| Country | Candidate's country of origin |
+| Application Date | Date the application was submitted |
+| YOE | Years of Experience |
+| Seniority | Candidate's seniority level |
+| Technology | Technology profile applied for |
+| Code Challenge Score | Score obtained in the Code Challenge assessment |
+| Technical Interview Score | Score obtained in the Technical Interview assessment |
+
+## 6. Main Profiling Findings
+
+| Profiling Item | Result |
+|---|---|
+| Number of rows and columns | 50000 X 20|
+| Data types |3 numéricas y 7 categóricas |
+| Missing values |0 |
+| Duplicate records | 0|
+| Unique values in relevant categorical attributes |Country: 244; Seniority: 7; Technology: 24|
+| Minimum and maximum application dates |2018-01-01 - 2022-07-04 |
+| Score ranges |0-10 |
+
+
+## 7. Business Process
+
+Candidates submit an application, which is registered along with their country, years of experience, seniority level, and the technology they are applying for. Each candidate is then evaluated through two technical assessments — the Code Challenge and the Technical Interview. Based on the business rule (both scores ≥ 7), the candidate's application is resolved into a final hiring outcome: **HIRED** or **NOT HIRED**.
+
+## 8. Grain Definition
+
+Each row of **FactApplication** represents one candidate's application to the selection process for a given technology, registered on a specific application date, including their years of professional experience, seniority level, results obtained in the Code Challenge and Technical Interview, estimated gender, and final hiring outcome (`is_hired`).
+
+Granularity is defined at the **individual candidate application level**, covering both hired and not-hired candidates, allowing metrics such as candidate count, hire count, and hiring rate to be calculated, as well as analysis of technical assessment performance.
+
+## 9. Star Schema Diagram
+
+![Start Schema](./diagrams/start_schema.png)
+
+
+## 10. Explanation of Dimensions and Facts
+
+### Dimensions
+
+| Dimension | Business Question Supported | Main Attributes |
+|---|---|---|
+| DimDate | What are the hiring trends over time? | `date_id`, `year`, `month`, `day` |
+| DimTechnology | Which technical profiles generate the highest number of hired candidates? | `technology_key`, `technology_name` |
+| DimSeniority | Which candidates generate the highest number of hires, by professional seniority? | `seniority_key`, `seniority_level` |
+| DimCountry | What differences exist between geographic regions? | `country_key`, `country_name` |
+| DimCandidate | What hiring trends and proportions exist by estimated gender? | `candidate_key`, `first_name`, `last_name`, `email`, `estimated_gender` |
+
+### Facts (FactApplication)
+
+| Measure | Meaning | Source / Calculation |
+|---|---|---|
+| code_challenge_score | Candidate's technical performance in the code challenge | Source data |
+| technical_interview_score | Candidate's technical performance in the interview | Source data |
+| yoe | Numeric value representing the candidate's years of experience | Source data |
+| is_hired | Determines whether the candidate is hired or not | `code_challenge_score ≥ 7 AND technical_interview_score ≥ 7` |
+| score_gap | Difference between the candidate's two evaluation scores | `code_challenge_score − technical_interview_score` |
+| cantidad_candidatos | Count measure to identify the number of candidates who applied | `SUM(cantidad_candidatos)` |
+| cantidad_contrataciones | Count measure to identify the number of hires made | `SUM(cantidad_contrataciones)` |
+| proporcion_contratados | Measure evaluating the hiring proportion | `cantidad_contrataciones / cantidad_candidatos` |
+
+## 11. ETL Architecture
+
+![Arquitectura ETL](./diagrams/pipeline-etl.png)
+
+
+## 12. Main Transformation Decisions
+
+| Decision | Rationale |
+|---|---|
+| Application Date as String to DateTime | Standardize date format for proper time-series analysis and dimensional aggregation |
+| Gender Estimation (UNKNOWN) | All candidates marked as UNKNOWN due to Genderize API rate limitations; structure supports future gender data enrichment |
+| IS_HIRED Business Rule | Implemented as `code_challenge_score ≥ 7 AND technical_interview_score ≥ 7` for consistent hiring classification |
+| Slowly Changing Dimensions (SCD) | Dimension tables implement SCD Type 1 (overwrite) since candidate attributes are assumed stable |
+| Additive Facts | All measures in FactApplication are additive, allowing direct aggregation across dimensions |
+| Surrogate Keys | Auto-increment INT keys on all dimensions for efficient FK relationships |
+| Score Gap Calculation | Pre-calculated in ETL (`code_challenge_score - technical_interview_score`) to support evaluation gap analysis |
+| Duplicate Records Handling | INSERT IGNORE used to prevent duplicate dimension entries while loading fact table |
+
+## 13. Technologies
+
+| Component | Technology | Version | Purpose |
+|---|---|---|---|
+| **Data Processing** | Python | 3.11+ | ETL orchestration and data transformation |
+| | Pandas | 2.0.3 | Data manipulation and cleaning |
+| | NumPy | 1.24.3 | Numerical operations |
+| **Database** | MySQL | 8.0+ | Data warehouse (OLAP) |
+| | mysql-connector-python | 8.0.33 | Python-MySQL connectivity |
+| **Visualization** | Matplotlib | 3.7.2 | Static analytical plots |
+| | Seaborn | 0.12.2 | Statistical data visualization |
+| **Environment** | Python-dotenv | 1.0.0 | Environment variable management |
+| **Version Control** | Git | Latest | Source code version control |
+
+### Project Structure
+
+```
+workshop-1/
+├── src/                          # Python source code
+│   ├── main.py                   # ETL pipeline orchestrator
+│   ├── extract.py                # Data extraction from CSV
+│   ├── clean.py                  # Data cleaning and transformation
+│   ├── dimensional_model.py      # Dimensional model creation
+│   ├── load.py                   # Data loading to MySQL
+│   └── visualization.py          # Analytics and visualization generation
+├── sql/
+│   ├── create_tables.sql         # Dimensional model DDL
+│   └── analytical_queries.sql    # Business intelligence queries
+├── data/
+│   ├── raw/                      # Source data (candidates.csv)
+│   └── processed/                # Cleaned data (integrated_candidates.csv)
+├── results/
+│   ├── visualizations/           # Generated analytical charts (PNG)
+│   └── reports/                  # Summary reports and findings
+├── diagrams/                     # Schema and architecture diagrams
+├── notebooks/                    # Jupyter notebooks for exploration
+├── requirements.txt              # Python dependencies
+├── .gitignore                    # Git ignore rules
+└── README                        # This file
+```
+
+## 14. Instructions to Run the Project
+
+### Prerequisites
+
+- Python 3.11 or higher
+- MySQL Server 8.0 or higher (running on localhost:3307)
+- MySQL User: `root` with password `1234` (update in `src/load.py` and `src/dimensional_model.py` if needed)
+
+### Setup Instructions
+
+**1. Clone the repository and navigate to project root:**
+
+```bash
+git clone <repository-url>
+cd workshop-1
+```
+
+**2. Install dependencies:**
+
+```bash
+pip install -r requirements.txt
+```
+
+**3. Ensure MySQL is running and accessible:**
+
+```bash
+mysql -h localhost -P 3307 -u root -p
+```
+
+**4. Place source data in the correct location:**
+
+Ensure `data/raw/candidates.csv` exists with candidate application records.
+
+### Running the Pipeline
+
+Once the environment and dependencies are set up, execute the full pipeline (extract → clean → create dimensions → load facts → generate visualizations) with a single command:
+
+```bash
+python src/main.py
+```
+
+**Expected Output:**
+
+```
+======================================================================
+ETL PIPELINE - MODELO DIMENSIONAL
+======================================================================
+
+[1/4] CREANDO MODELO DIMENSIONAL...
+✓ Base de datos 'candidates' lista para usar
+✓ Conexión exitosa a la base de datos 'candidates'
+✓ Todas las tablas han sido creadas exitosamente
+
+[2/4] EXTRACCIÓN DE DATOS...
+✓ Extraídos 50000 registros
+
+[3/4] LIMPIEZA Y TRANSFORMACIÓN DE DATOS...
+✓ Limpieza completada. 50000 registros listos
+
+[4/4] GUARDANDO DATOS INTEGRADOS Y CARGANDO AL DATA WAREHOUSE...
+✓ Archivo CSV guardado en: data/processed/integrated_candidates.csv
+✓ Carga de datos completada exitosamente
+```
+
+### Generating Analytical Visualizations
+
+After running the main pipeline, generate all analytical charts:
+
+```bash
+python src/visualization.py
+```
+
+This generates 6 comprehensive visualization sets in `results/visualizations/`.
+
+## 15. Analytical Queries and Visualizations
+
+### Query 1: Hiring Trends Over Time (R1)
+
+**Purpose:** Monitor hiring evolution across year, month, and day of the week.
+
+**Query:** Groups FactApplication by DimDate dimensions, counting total applications and hires, calculating hiring rate.
+
+**Key Metrics:**
+- Total applications and hired counts by temporal period
+- Hiring rate percentage by period
+- Trend analysis across years, months, and days
+
+**Visualization:**
+![Hiring Trends Over Time](./results/visualizations/01_evolucion_tiempo.png)
+
+---
+
+### Query 2: Technology Analysis (R2)
+
+**Purpose:** Identify which technology profiles generate the highest hiring volume and rate.
+
+**Query:** Joins FactApplication with DimTechnology, ranking technologies by hire count and hiring rate.
+
+**Key Metrics:**
+- Candidate count and hire count by technology
+- Hiring rate (%) by technology
+- Average Code Challenge and Technical Interview scores
+
+**Visualization:**
+![Technology Analysis](./results/visualizations/02_tecnologias.png)
+
+---
+
+### Query 3: Candidate Profile Analysis — Seniority & Experience (R3)
+
+**Purpose:** Analyze hiring outcomes by seniority level and years of professional experience.
+
+**Query:** Joins FactApplication with DimSeniority, grouping by seniority and YOE, calculating hire count and rate.
+
+**Key Metrics:**
+- Hire count by seniority level and experience
+- Hiring rate by seniority level and experience (heatmap)
+- Average technical performance by profile
+
+**Visualization:**
+![Seniority & Experience Analysis](./results/visualizations/03_seniority_experiencia.png)
+
+---
+
+### Query 4: Technical Performance Analysis — Country & Experience (R4)
+
+**Purpose:** Analyze candidate technical performance (both evaluations) by country and years of experience.
+
+**Query:** Joins FactApplication with DimCountry, grouping by country and YOE, calculating average scores and hire rate.
+
+**Key Metrics:**
+- Average Code Challenge and Technical Interview scores
+- Geographic and experience-based performance comparison
+- Hiring rate by country and experience level
+
+**Visualization:**
+![Country & Experience Analysis](./results/visualizations/04_pais_experiencia.png)
+
+---
+
+### Query 5: Evaluation Gap Analysis (R5)
+
+**Purpose:** Identify relevant differences between Code Challenge and Technical Interview performance.
+
+**Query:** Calculates global statistics on score_gap, categorizing candidates by relative performance.
+
+**Key Metrics:**
+- Average scores for each evaluation
+- Score gap distribution (better in Code Challenge / Technical Interview / equal)
+- Proportion of candidates in each performance category
+
+**Visualization:**
+![Evaluation Gap Analysis](./results/visualizations/05_diferencia_evaluaciones.png)
+
+---
+
+### Query 6: Gender-Based Analysis (Bonus)
+
+**Purpose:** Analyze hiring trends and proportions by estimated gender.
+
+**Query:** Joins FactApplication with DimCandidate, grouping by gender_estimated, calculating hire count and rate.
+
+**Key Metrics:**
+- Candidate distribution by gender
+- Hire count and rate by gender
+- Average technical performance and experience by gender
+
+**Visualization:**
+![Gender-Based Analysis](./results/visualizations/06_genero.png)
+
+---
+
+### KPIs (derived from FactApplication measures)
+
+| KPI | Definition |
+|---|---|
+| Candidate count | `SUM(cantidad_candidatos)` |
+| Hire count | `SUM(cantidad_contrataciones)` |
+| Hiring rate | `cantidad_contrataciones / cantidad_candidatos` |
+| Score gap | `code_challenge_score − technical_interview_score` |
+
+## 16. Main Business Findings
+
+### Summary of Key Insights
+
+Based on the 6 analytical queries and accompanying visualizations, the following business insights have been derived:
+
+#### **R1 - Hiring Trends Over Time**
+
+The temporal analysis reveals hiring patterns across years, months, and days of the week. Peak hiring periods and seasonal trends can be identified to optimize recruitment planning.
+
+**Chart:** See `results/visualizations/01_evolucion_tiempo.png`
+
+#### **R2 - Technology Analysis**
+
+Different technology profiles show significant variation in hiring rates and candidate volume. High-demand technologies (e.g., high hire counts) may indicate strong technical market fit and candidate quality in those areas.
+
+**Chart:** See `results/visualizations/02_tecnologias.png`
+
+#### **R3 - Seniority & Experience Analysis**
+
+Hiring outcomes vary substantially across seniority levels and years of experience. Senior and experienced candidates may demonstrate different hiring rates compared to junior or trainee-level applicants.
+
+**Chart:** See `results/visualizations/03_seniority_experiencia.png`
+
+#### **R4 - Geographic & Experience-Based Performance**
+
+Candidates from different geographic regions show variation in technical performance and hiring outcomes. Years of experience also significantly impact both evaluation scores and hiring probability.
+
+**Chart:** See `results/visualizations/04_pais_experiencia.png`
+
+#### **R5 - Evaluation Gap Analysis**
+
+A notable portion of candidates show consistent performance across both evaluations, while others demonstrate significant gaps between Code Challenge and Technical Interview scores. This insight can inform interview refinement strategies.
+
+**Chart:** See `results/visualizations/05_diferencia_evaluaciones.png`
+
+#### **Bonus - Gender-Based Analysis**
+
+While all candidates are currently marked as gender UNKNOWN (due to API limitations), the analytical structure supports future gender-based equity analysis once gender data becomes available.
+
+**Chart:** See `results/visualizations/06_genero.png`
+
+
+## 17. Final Requirements Validation
+
+| Requirement | Required Dimension(s) | Required Measure(s) | Validated? |
+|---|---|---|---|
+| R1 | DimDate | cantidad_contrataciones | ✅ Yes |
+| R2 | DimTechnology | proporcion_contratados | ✅ Yes |
+| R3 | DimSeniority | cantidad_contrataciones | ✅ Yes |
+| R4 | DimCountry | cantidad_contrataciones | ✅ Yes |
+| R5 | DimCandidate | cantidad_contrataciones | ✅ Yes |
