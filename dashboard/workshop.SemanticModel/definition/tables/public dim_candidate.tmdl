@@ -1,0 +1,67 @@
+table 'public dim_candidate'
+	lineageTag: 555c9a62-80ee-416b-8968-b39eb3c951d2
+
+	measure 'Total Candidates' =
+			
+			DISTINCTCOUNT('public fact_application'[candidate_key])
+		formatString: 0
+		lineageTag: 94c02529-700a-4d14-a7de-c38e00126dbd
+
+	measure 'Candidates by Gap' =
+			
+			DISTINCTCOUNT('public fact_application'[candidate_key])
+		formatString: 0
+		lineageTag: 3b511451-321b-42c6-9450-ae82b7f27f5c
+
+	column candidate_key
+		dataType: int64
+		formatString: 0
+		lineageTag: c8c92151-d271-4210-94c3-e1f2859043b8
+		summarizeBy: none
+		sourceColumn: candidate_key
+
+		annotation SummarizationSetBy = Automatic
+
+	column candidate_id
+		dataType: string
+		lineageTag: 331aa283-e7af-48c5-8d35-dcd1c4dbb939
+		summarizeBy: none
+		sourceColumn: candidate_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column first_name
+		dataType: string
+		lineageTag: cf107ee8-4058-4637-92db-fa833309aba6
+		summarizeBy: none
+		sourceColumn: first_name
+
+		annotation SummarizationSetBy = Automatic
+
+	column last_name
+		dataType: string
+		lineageTag: fb8dac0c-c9ab-4cb2-b2f0-0b6f2c6cb310
+		summarizeBy: none
+		sourceColumn: last_name
+
+		annotation SummarizationSetBy = Automatic
+
+	column email
+		dataType: string
+		lineageTag: 81350ee5-64a8-444f-a30f-0edfe7c38150
+		summarizeBy: none
+		sourceColumn: email
+
+		annotation SummarizationSetBy = Automatic
+
+	partition 'public dim_candidate' = m
+		mode: import
+		source =
+				let
+				    Origen = PostgreSQL.Database("localhost", "candidates"),
+				    public_dim_candidate = Origen{[Schema="public",Item="dim_candidate"]}[Data]
+				in
+				    public_dim_candidate
+
+	annotation PBI_ResultType = Table
+

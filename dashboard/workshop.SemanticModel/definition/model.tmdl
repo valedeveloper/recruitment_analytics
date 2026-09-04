@@ -1,0 +1,24 @@
+model Model
+	culture: es-MX
+	defaultPowerBIDataSourceVersion: powerBI_V3
+	sourceQueryCulture: es-CO
+	valueFilterBehavior: independent
+	dataAccessOptions
+		legacyRedirects
+		returnErrorValuesAsNull
+
+annotation __PBI_TimeIntelligenceEnabled = 1
+
+annotation PBI_QueryOrder = ["public dim_candidate","public dim_country","public dim_seniority","public dim_technology","public fact_application","public dim_dates"]
+
+annotation PBI_ProTooling = ["DevMode"]
+
+ref table 'public dim_candidate'
+ref table 'public dim_country'
+ref table 'public dim_seniority'
+ref table 'public dim_technology'
+ref table 'public fact_application'
+ref table 'public dim_dates'
+
+ref cultureInfo es-MX
+

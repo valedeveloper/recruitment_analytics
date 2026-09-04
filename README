@@ -372,14 +372,3 @@ A notable portion of candidates show consistent performance across both evaluati
 
 **Chart:** See `results/visualizations/05_diferencia_evaluaciones.png`
 
-
-
-## 17. Final Requirements Validation
-
-| Requirement | Required Dimension(s) | Required Measure(s) | Validated? |
-|---|---|---|---|
-| R1 | DimDate | `COUNT(*)`, `SUM(is_hired)` | ✅ Yes |
-| R2 | DimTechnology | `COUNT(*)`, `SUM(is_hired)` | ✅ Yes |
-| R3 | DimSeniority | `COUNT(*)`, `SUM(is_hired)` | ✅ Yes |
-| R4 | DimCountry | `COUNT(*)`, `SUM(is_hired)` | ✅ Yes |
-| R5 | DimCandidate | `COUNT(*)`, `SUM(is_hired)` | ✅ Yes |

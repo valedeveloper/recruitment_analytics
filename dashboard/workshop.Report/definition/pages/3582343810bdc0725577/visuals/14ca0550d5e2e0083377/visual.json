@@ -1,0 +1,105 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json",
+  "name": "14ca0550d5e2e0083377",
+  "position": {
+    "x": 30,
+    "y": 760,
+    "z": 4001,
+    "height": 320,
+    "width": 1890,
+    "tabOrder": 4001
+  },
+  "visual": {
+    "visualType": "scatterChart",
+    "query": {
+      "queryState": {
+        "Series": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "public fact_application"
+                    }
+                  },
+                  "Property": "is_hired"
+                }
+              },
+              "queryRef": "public fact_application.is_hired",
+              "nativeQueryRef": "is_hired"
+            }
+          ]
+        },
+        "X": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "public fact_application"
+                    }
+                  },
+                  "Property": "code_challenge_score"
+                }
+              },
+              "queryRef": "Sum(public fact_application.code_challenge_score)",
+              "nativeQueryRef": "code_challenge_score",
+              "active": true
+            }
+          ]
+        },
+        "Y": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "public fact_application"
+                    }
+                  },
+                  "Property": "technical_interview_score"
+                }
+              },
+              "queryRef": "Sum(public fact_application.technical_interview_score)",
+              "nativeQueryRef": "technical_interview_score"
+            }
+          ]
+        }
+      }
+    },
+    "objects": {
+      "legend": [
+        {
+          "properties": {
+            "showTitle": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Code Challenge vs Technical Interview'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "drillFilterOtherVisuals": true
+  }
+}

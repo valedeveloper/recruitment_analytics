@@ -1,0 +1,32 @@
+relationship 51438679-1af4-4be1-8339-de9136fe9d34
+	crossFilteringBehavior: bothDirections
+	fromCardinality: one
+	fromColumn: 'public fact_application'.candidate_key
+	toColumn: 'public dim_candidate'.candidate_key
+
+	annotation PBI_IsFromSource = FS
+
+relationship 6275b17b-0c39-4f08-8771-4bbd05b77b4d
+	fromColumn: 'public fact_application'.country_key
+	toColumn: 'public dim_country'.country_key
+
+	annotation PBI_IsFromSource = FS
+
+relationship ce193cec-26cb-4287-8c84-506773133a24
+	fromColumn: 'public fact_application'.date_id
+	toColumn: 'public dim_dates'.date_id
+
+	annotation PBI_IsFromSource = FS
+
+relationship 873308c0-0c0e-4345-8537-169519ed27e3
+	fromColumn: 'public fact_application'.seniority_key
+	toColumn: 'public dim_seniority'.seniority_key
+
+	annotation PBI_IsFromSource = FS
+
+relationship b1490f9d-f01a-41fe-b67e-e3e888510585
+	fromColumn: 'public fact_application'.technology_key
+	toColumn: 'public dim_technology'.technology_key
+
+	annotation PBI_IsFromSource = FS
+

@@ -1,0 +1,38 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json",
+  "name": "013e58ca4ede4ebe571c",
+  "position": {
+    "x": 10,
+    "y": 0,
+    "z": 0,
+    "height": 105,
+    "width": 1910,
+    "tabOrder": 0
+  },
+  "visual": {
+    "visualType": "textbox",
+    "objects": {
+      "general": [
+        {
+          "properties": {
+            "paragraphs": [
+              {
+                "textRuns": [
+                  {
+                    "value": "HIRING & CANDIDATE PROFILES ",
+                    "textStyle": {
+                      "fontWeight": "bold",
+                      "fontSize": "54pt"
+                    }
+                  }
+                ],
+                "horizontalTextAlignment": "center"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "drillFilterOtherVisuals": true
+  }
+}

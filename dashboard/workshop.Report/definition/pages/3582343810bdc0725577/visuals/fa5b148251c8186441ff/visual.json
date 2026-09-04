@@ -1,0 +1,89 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json",
+  "name": "fa5b148251c8186441ff",
+  "position": {
+    "x": 0,
+    "y": 436,
+    "z": 2000,
+    "height": 322,
+    "width": 944,
+    "tabOrder": 2000
+  },
+  "visual": {
+    "visualType": "clusteredBarChart",
+    "query": {
+      "queryState": {
+        "Category": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "public dim_country"
+                    }
+                  },
+                  "Property": "country_name"
+                }
+              },
+              "queryRef": "public dim_country.country_name",
+              "nativeQueryRef": "Recuento de country_name",
+              "active": true
+            }
+          ]
+        },
+        "Y": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "public fact_application"
+                    }
+                  },
+                  "Property": "Average Code Challenge"
+                }
+              },
+              "queryRef": "public fact_application.Average Code Challenge",
+              "nativeQueryRef": "Average Code Challenge"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "public fact_application"
+                    }
+                  },
+                  "Property": "Average Evaluation Gap"
+                }
+              },
+              "queryRef": "public fact_application.Average Evaluation Gap",
+              "nativeQueryRef": "Average Evaluation Gap"
+            }
+          ]
+        }
+      },
+      "sortDefinition": {
+        "sort": [
+          {
+            "field": {
+              "Measure": {
+                "Expression": {
+                  "SourceRef": {
+                    "Entity": "public fact_application"
+                  }
+                },
+                "Property": "Average Code Challenge"
+              }
+            },
+            "direction": "Descending"
+          }
+        ],
+        "isDefaultSort": true
+      }
+    },
+    "drillFilterOtherVisuals": true
+  }
+}

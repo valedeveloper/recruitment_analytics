@@ -1,0 +1,31 @@
+table 'public dim_technology'
+	lineageTag: 2f3343dc-5a4a-43ad-9bb3-95fb1575f1b6
+
+	column technology_key
+		dataType: int64
+		formatString: 0
+		lineageTag: 534a840e-c223-4ba4-879a-c2c209f41c08
+		summarizeBy: none
+		sourceColumn: technology_key
+
+		annotation SummarizationSetBy = Automatic
+
+	column technology_name
+		dataType: string
+		lineageTag: 1bb5590b-e0d8-4d3e-9074-f5d4c3b1ed0f
+		summarizeBy: none
+		sourceColumn: technology_name
+
+		annotation SummarizationSetBy = Automatic
+
+	partition 'public dim_technology' = m
+		mode: import
+		source =
+				let
+				    Origen = PostgreSQL.Database("localhost", "candidates"),
+				    public_dim_technology = Origen{[Schema="public",Item="dim_technology"]}[Data]
+				in
+				    public_dim_technology
+
+	annotation PBI_ResultType = Table
+

@@ -1,0 +1,50 @@
+table 'public dim_dates'
+	lineageTag: 0aade018-8356-4b6c-bcf0-ec0ba5ed45dd
+
+	column date_id
+		dataType: int64
+		formatString: 0
+		lineageTag: d54e2e38-3623-4e0f-a820-12a928091f88
+		summarizeBy: none
+		sourceColumn: date_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column year
+		dataType: int64
+		formatString: 0
+		lineageTag: 41aece47-886f-4334-a211-c9ae452531d0
+		summarizeBy: none
+		sourceColumn: year
+
+		annotation SummarizationSetBy = Automatic
+
+	column month_number
+		dataType: int64
+		formatString: 0
+		lineageTag: f59da6be-1cc8-4cc1-a985-cf81795bd9a8
+		summarizeBy: none
+		sourceColumn: month_number
+
+		annotation SummarizationSetBy = Automatic
+
+	column day_of_week
+		dataType: int64
+		formatString: 0
+		lineageTag: d252ff4d-7955-43b0-9da9-42c14a5f1e32
+		summarizeBy: none
+		sourceColumn: day_of_week
+
+		annotation SummarizationSetBy = Automatic
+
+	partition 'public dim_dates' = m
+		mode: import
+		source =
+				let
+				    Origen = PostgreSQL.Database("localhost", "candidates"),
+				    public_dim_dates = Origen{[Schema="public",Item="dim_dates"]}[Data]
+				in
+				    public_dim_dates
+
+	annotation PBI_ResultType = Table
+

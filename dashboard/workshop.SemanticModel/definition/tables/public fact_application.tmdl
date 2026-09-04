@@ -1,0 +1,210 @@
+table 'public fact_application'
+	lineageTag: dad619fa-a514-4f28-b48e-00449f4ef642
+
+	measure 'Total Applications' = COUNTROWS('public fact_application')
+		formatString: 0
+		lineageTag: 4701009b-5aa6-4f51-bd0c-d97d4126d02f
+
+	measure 'Total Hired' =
+			CALCULATE(
+			    COUNTROWS('public fact_application'),
+			    'public fact_application'[is_hired] = 1
+			)
+		formatString: 0
+		lineageTag: 59344ef0-f815-4125-91aa-b11c972dcfe5
+
+	measure 'Average Code Challenge' =
+			
+			AVERAGE('public fact_application'[code_challenge_score])
+		formatString: 0
+		lineageTag: 89057846-cabe-4ae1-a221-b78562fd017c
+
+	measure 'Average Technical Interview' =
+			
+			AVERAGE('public fact_application'[technical_interview_score])
+		lineageTag: 46d48fad-e3f2-457f-addb-015326172e35
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	measure 'Average Evaluation Gap' =
+			
+			AVERAGEX(
+			    'public fact_application',
+			    'public fact_application'[code_challenge_score]
+			        - 'public fact_application'[technical_interview_score]
+			)
+		lineageTag: 3441ce4c-3c77-47b8-98ef-44c6085d7486
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	measure 'Total Not Hired' =
+			
+			[Total Applications] - [Total Hired]
+		formatString: 0
+		lineageTag: e3d7e40b-7b2f-4c85-b2a5-2f06158550b8
+
+	measure 'Hiring Rate' =
+			
+			DIVIDE(
+			    [Total Hired],
+			    [Total Applications],
+			    0
+			)
+		lineageTag: 494503ce-9051-4598-8442-d6a6315439e6
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column application_key
+		dataType: int64
+		formatString: 0
+		lineageTag: f4f80b95-cb27-40f9-b209-d8c185608940
+		summarizeBy: sum
+		sourceColumn: application_key
+
+		annotation SummarizationSetBy = Automatic
+
+	column date_id
+		dataType: int64
+		formatString: 0
+		lineageTag: bba46add-f98d-46fa-aa31-1cd06cb7f1aa
+		summarizeBy: none
+		sourceColumn: date_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column candidate_key
+		dataType: int64
+		formatString: 0
+		lineageTag: 3876782b-7839-43f1-9c8c-4a02e96ea66e
+		summarizeBy: none
+		sourceColumn: candidate_key
+
+		annotation SummarizationSetBy = Automatic
+
+	column country_key
+		dataType: int64
+		formatString: 0
+		lineageTag: 927bfeab-4232-435d-bbd9-08746a1fa951
+		summarizeBy: none
+		sourceColumn: country_key
+
+		annotation SummarizationSetBy = Automatic
+
+	column seniority_key
+		dataType: int64
+		formatString: 0
+		lineageTag: d2cd016e-164e-453f-a952-05d6e83320a9
+		summarizeBy: none
+		sourceColumn: seniority_key
+
+		annotation SummarizationSetBy = Automatic
+
+	column technology_key
+		dataType: int64
+		formatString: 0
+		lineageTag: f646027a-b9cf-4475-ae68-efcbbb2475b2
+		summarizeBy: none
+		sourceColumn: technology_key
+
+		annotation SummarizationSetBy = Automatic
+
+	column code_challenge_score
+		dataType: double
+		lineageTag: 559e9fb8-c0be-4dc7-8d95-ece5a137786a
+		summarizeBy: sum
+		sourceColumn: code_challenge_score
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column technical_interview_score
+		dataType: double
+		lineageTag: 266ea6c1-8f14-4651-abf7-175e542d0fb0
+		summarizeBy: sum
+		sourceColumn: technical_interview_score
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column yoe
+		dataType: int64
+		formatString: 0
+		lineageTag: 408c4263-e4b5-407c-99cd-146efed24172
+		summarizeBy: sum
+		sourceColumn: yoe
+
+		annotation SummarizationSetBy = Automatic
+
+	column is_hired
+		dataType: int64
+		formatString: 0
+		lineageTag: 7e1b383b-863f-4e18-a0ae-6172141fd755
+		summarizeBy: sum
+		sourceColumn: is_hired
+
+		annotation SummarizationSetBy = Automatic
+
+	column score_gap
+		dataType: double
+		isHidden
+		lineageTag: fd4e1ce6-9cc0-4f26-b492-36f9a0cb7b8f
+		summarizeBy: sum
+		sourceColumn: score_gap
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column 'Experience Group' =
+			SWITCH(
+			    TRUE(),
+			    'public fact_application'[yoe] <= 2, "0–2 years",
+			    'public fact_application'[yoe] <= 5, "3–5 years",
+			    'public fact_application'[yoe] <= 10, "6–10 years",
+			    "11+ years"
+			)
+		lineageTag: 49e0b9bb-f5c3-43aa-9ae4-7dbb05fed731
+		summarizeBy: none
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'Evaluation Gap' =
+			
+			'public fact_application'[code_challenge_score]    - 'public fact_application'[technical_interview_score]
+		lineageTag: f9c5f3e9-a208-4118-8b81-d7d7c236fca8
+		summarizeBy: sum
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column 'Evaluation Gap Category' = ```
+			
+			SWITCH(
+			    TRUE(),
+			    'public fact_application'[Evaluation Gap] < -1, "Better in Interview",
+			    'public fact_application'[Evaluation Gap] > 1, "Better in Code Challenge",
+			    "Similar performance"
+			)
+			
+			```
+		lineageTag: 27a49afd-4cdc-48cf-848d-a9db5090147d
+		summarizeBy: none
+
+		annotation SummarizationSetBy = Automatic
+
+	partition 'public fact_application' = m
+		mode: import
+		source =
+				let
+				    Origen = PostgreSQL.Database("localhost", "candidates"),
+				    public_fact_application = Origen{[Schema="public",Item="fact_application"]}[Data]
+				in
+				    public_fact_application
+
+	annotation PBI_ResultType = Table
+
