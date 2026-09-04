@@ -1,7 +1,5 @@
 
 import pandas as pd
-import requests
-import time
 
 
 # ============================================================
@@ -313,6 +311,12 @@ def clean(df):
         )
     )
 
+    df_candidates["candidate_id"] = (
+        df_candidates["first_name"] + "_" +
+        df_candidates["last_name"] + "_" +
+        df_candidates["email"].astype("string").str.strip().str.lower()
+    )
+
     df_candidates["years_of_experience"] = (
         pd.to_numeric(
             df_candidates["years_of_experience"],
@@ -372,9 +376,6 @@ def clean(df):
     # Asignar género a cada candidato
     # --------------------------------------------------------
 
-    df_candidates["gender_estimate"] = "UNKNOWN"
-
-
     # ========================================================
     # 9. RESUMEN
     # ========================================================
@@ -382,12 +383,6 @@ def clean(df):
     # print("\n" + "=" * 60)
     # print("RESULTADO DE ESTIMACIÓN DE GÉNERO")
     # print("=" * 60)
-
-    # print(
-    #     df_candidates["gender_estimate"]
-    #     .value_counts()
-    # )
-
 
     # ========================================================
     # 10. RETORNAR DATAFRAME

@@ -1,20 +1,11 @@
 from pathlib import Path
 import pandas as pd
-import mysql.connector
-from mysql.connector import Error
+import psycopg2
+from psycopg2 import Error
+from config import DB_CONFIG
 
 PROJECT_ROOT = Path(__file__).parent.parent
 CSV_OUTPUT_PATH = PROJECT_ROOT / "data" / "processed" / "integrated_candidates.csv"
-
-DB_CONFIG = {
-    "host": "localhost",
-    "user": "root",
-    "port":3307,
-    "password": "1234",
-    "database": "candidates"
-}
-
-
 
 def save_to_csv(df, output_path=CSV_OUTPUT_PATH):
     """Guarda el DataFrame transformado en un archivo CSV."""
@@ -27,9 +18,7 @@ def save_to_csv(df, output_path=CSV_OUTPUT_PATH):
 def get_db_connection():
     """Obtiene la conexión a la base de datos."""
     try:
-        connection = mysql.connector.connect(**DB_CONFIG)
-        if connection.is_connected():
-            return connection
+        return psycopg2.connect(**DB_CONFIG)
     except Error as e:
         print(f"✗ Error de conexión: {e}")
         return None
@@ -59,7 +48,7 @@ def load_dim_dates(cursor, candidates_df):
     try:
         # Usar executemany para insertar múltiples registros de una vez
         cursor.executemany(
-            "INSERT IGNORE INTO dim_dates (date_id, year, month_number, day_of_week) VALUES (%s, %s, %s, %s)",
+            "INSERT INTO dim_dates (date_id, year, month_number, day_of_week) VALUES (%s, %s, %s, %s) ON CONFLICT DO NOTHING",
             records
         )
         print(f"✓ {cursor.rowcount} registros insertados en dim_dates")
@@ -72,16 +61,26 @@ def load_dim_candidate(cursor, candidates_df):
     print("\nCargando dim_candidate...")
     
     # Obtener candidatos únicos
-    candidates_unique = candidates_df[['first_name', 'last_name', 'email', 'gender_estimate']].drop_duplicates()
+    candidates_unique = candidates_df[
+        ['candidate_id', 'first_name', 'last_name', 'email']
+    ].drop_duplicates(subset=['candidate_id'])
     
     records = []
     for _, row in candidates_unique.iterrows():
-        records.append((row['first_name'], row['last_name'], row['email'], row['gender_estimate']))
+        records.append((
+            row['candidate_id'],
+            row['first_name'],
+            row['last_name'],
+            row['email']
+        ))
     
     try:
         for record in records:
             cursor.execute(
-                "INSERT IGNORE INTO dim_candidate (first_name, last_name, email, gender_estimated) VALUES (%s, %s, %s, %s)",
+                """INSERT INTO dim_candidate
+                         (candidate_id, first_name, last_name, email)
+                         VALUES (%s, %s, %s, %s)
+                         ON CONFLICT (candidate_id) DO NOTHING""",
                 record
             )
         print(f"✓ {len(records)} registros insertados en dim_candidate")
@@ -98,7 +97,7 @@ def load_dim_country(cursor, candidates_df):
     try:
         for country in unique_countries:
             cursor.execute(
-                "INSERT IGNORE INTO dim_country (country_name) VALUES (%s)",
+                "INSERT INTO dim_country (country_name) VALUES (%s) ON CONFLICT (country_name) DO NOTHING",
                 (country,)
             )
         print(f"✓ {len(unique_countries)} registros insertados en dim_country")
@@ -115,7 +114,7 @@ def load_dim_seniority(cursor, candidates_df):
     try:
         for seniority in unique_seniorities:
             cursor.execute(
-                "INSERT IGNORE INTO dim_seniority (seniority_name) VALUES (%s)",
+                "INSERT INTO dim_seniority (seniority_name) VALUES (%s) ON CONFLICT (seniority_name) DO NOTHING",
                 (seniority,)
             )
         print(f"✓ {len(unique_seniorities)} registros insertados en dim_seniority")
@@ -132,7 +131,7 @@ def load_dim_technology(cursor, candidates_df):
     try:
         for technology in unique_technologies:
             cursor.execute(
-                "INSERT IGNORE INTO dim_technology (technology_name) VALUES (%s)",
+                "INSERT INTO dim_technology (technology_name) VALUES (%s) ON CONFLICT (technology_name) DO NOTHING",
                 (technology,)
             )
         print(f"✓ {len(unique_technologies)} registros insertados en dim_technology")
@@ -150,7 +149,10 @@ def load_fact_application(cursor, candidates_df):
         date_id = int(pd.Timestamp(row['application_date']).strftime("%Y%m%d"))
         
         # Obtener las claves de las dimensiones
-        cursor.execute("SELECT candidate_key FROM dim_candidate WHERE email = %s", (row['email'],))
+        cursor.execute(
+            "SELECT candidate_key FROM dim_candidate WHERE candidate_id = %s",
+            (row['candidate_id'],)
+        )
         candidate_key_result = cursor.fetchone()
         candidate_key = candidate_key_result[0] if candidate_key_result else None
         
@@ -166,9 +168,6 @@ def load_fact_application(cursor, candidates_df):
         technology_key_result = cursor.fetchone()
         technology_key = technology_key_result[0] if technology_key_result else None
         
-        # Calcular score_gap
-        score_gap = row['code_challenge_score'] - row['technical_interview_score']
-        
         records.append((
             date_id,
             candidate_key,
@@ -178,21 +177,16 @@ def load_fact_application(cursor, candidates_df):
             row['code_challenge_score'],
             row['technical_interview_score'],
             row['years_of_experience'],
-            row['is_hired'],
-            score_gap,
-            1,  # cantidad_candidatos (1 por cada fila)
-            row['is_hired'],  # cantidad_contrataciones (es_hired)
-            (row['is_hired'] * 100)  # proporcion_contratacion
+            row['is_hired']
         ))
     
     try:
         for record in records:
             cursor.execute(
                 """INSERT INTO fact_application 
-                   (date_id, candidate_key, country_key, seniority_key, technology_key, 
-                    code_challenge_score, technical_interview_score, yoe, is_hired, score_gap,
-                    cantidad_candidatos, cantidad_contrataciones, proporcion_contratacion) 
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                         (date_id, candidate_key, country_key, seniority_key, technology_key, 
+                          code_challenge_score, technical_interview_score, yoe, is_hired) 
+                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
                 record
             )
         print(f"✓ {len(records)} registros insertados en fact_application")
@@ -241,7 +235,6 @@ def load_all_dimensions_facts(candidates_df):
         return False
     
     finally:
-        if connection.is_connected():
-            cursor.close()
-            connection.close()
+        cursor.close()
+        connection.close()
 

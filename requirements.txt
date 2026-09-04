@@ -5,7 +5,7 @@ pandas==2.0.3
 numpy==1.24.3
 
 # Database
-mysql-connector-python==8.0.33
+psycopg2-binary==2.9.9
 
 # Visualization
 matplotlib==3.7.2
@@ -13,3 +13,4 @@ seaborn==0.12.2
 
 # Utilities
 python-dotenv==1.0.0
+requests==2.31.0

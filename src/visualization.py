@@ -1,39 +1,38 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-import mysql.connector
-from mysql.connector import Error
+import psycopg2
+from psycopg2 import Error
 from pathlib import Path
+from config import DB_CONFIG
 
-# Configuración
+
 PROJECT_ROOT = Path(__file__).parent.parent
 VISUALIZATIONS_PATH = PROJECT_ROOT / "results" / "visualizations"
-
-DB_CONFIG = {
-    "host": "localhost",
-    "user": "root",
-    "port": 3307,
-    "password": "1234",
-    "database": "candidates"
-}
-
-# Crear carpeta de visualizaciones si no existe
 VISUALIZATIONS_PATH.mkdir(parents=True, exist_ok=True)
 
-# Configurar estilo
-sns.set_style("whitegrid")
-plt.rcParams['figure.figsize'] = (14, 8)
+sns.set_theme(style="whitegrid", palette="colorblind")
+plt.rcParams.update({
+    "figure.dpi": 120,
+    "axes.titleweight": "bold",
+    "axes.titlesize": 12,
+    "axes.labelsize": 10,
+})
+
+HIRED_COLOR = "#168aad"
+APPLICATION_COLOR = "#6c757d"
+RATE_COLOR = "#e76f51"
+CODE_COLOR = "#457b9d"
+INTERVIEW_COLOR = "#e76f51"
 
 
 def get_db_connection():
     """Obtiene la conexión a la base de datos."""
     try:
-        connection = mysql.connector.connect(**DB_CONFIG)
-        if connection.is_connected():
-            return connection
-    except Error as e:
-        print(f"✗ Error de conexión: {e}")
-        return None
+        return psycopg2.connect(**DB_CONFIG)
+    except Error as error:
+        print(f"✗ Error de conexión: {error}")
+    return None
 
 
 def execute_query(query):
@@ -41,458 +40,373 @@ def execute_query(query):
     connection = get_db_connection()
     if not connection:
         return None
-    
+
     try:
-        df = pd.read_sql(query, connection)
-        return df
-    except Error as e:
-        print(f"✗ Error al ejecutar query: {e}")
+        return pd.read_sql(query, connection)
+    except Error as error:
+        print(f"✗ Error al ejecutar query: {error}")
         return None
     finally:
-        if connection.is_connected():
+        if not connection.closed:
             connection.close()
+
+
+def save_figure(figure, filename):
+    """Guarda una figura con el mismo nombre usado en el README."""
+    figure.savefig(VISUALIZATIONS_PATH / filename, dpi=300, bbox_inches="tight")
+    plt.close(figure)
+    print(f"✓ Gráfica guardada: {filename}")
+
+
+def add_value_labels(axis, bars, formatter="{:,.0f}"):
+    """Agrega valores legibles a barras horizontales o verticales."""
+    for bar in bars:
+        if bar.get_width() != 0:
+            value = bar.get_width()
+            axis.text(value, bar.get_y() + bar.get_height() / 2, f" {formatter.format(value)}", va="center", fontsize=8)
+        else:
+            value = bar.get_height()
+            axis.text(bar.get_x() + bar.get_width() / 2, value, f"{formatter.format(value)}", ha="center", va="bottom", fontsize=8)
 
 
 # ============================================================
 # QUERY 1: Evolución de contrataciones por tiempo
 # ============================================================
 def visualizar_evolucion_tiempo():
-    """Query 1: Evolución de contrataciones por año, mes y día."""
-    print("\n[1/6] Generando gráfica: Evolución de contrataciones por tiempo...")
-    
+    """Muestra volumen, tasa y comportamiento semanal de las contrataciones."""
+    print("\n[1/5] Generando gráfica: Evolución de contrataciones por tiempo...")
+
     query = """
-    SELECT 
-        d.year,
-        d.month_number,
-        d.day_of_week,
-        COUNT(*) AS total_aplicaciones,
-        SUM(f.is_hired) AS total_contratados,
-        ROUND(SUM(f.is_hired) / COUNT(*) * 100, 2) AS proporcion_contratacion_pct
+    SELECT d.date_id, d.year, d.month_number, d.day_of_week,
+           COUNT(*) AS total_aplicaciones, SUM(f.is_hired) AS total_contratados
     FROM fact_application AS f
     JOIN dim_dates AS d ON f.date_id = d.date_id
-    GROUP BY d.year, d.month_number, d.day_of_week
-    ORDER BY d.year, d.month_number, d.day_of_week;
+    GROUP BY d.date_id, d.year, d.month_number, d.day_of_week
+    ORDER BY d.date_id;
     """
-    
     df = execute_query(query)
     if df is None or df.empty:
         print("✗ No hay datos para visualizar")
         return
-    
-    # Crear subplots
-    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-    fig.suptitle('Evolución de Contrataciones por Tiempo', fontsize=16, fontweight='bold')
-    
-    # 1. Contrataciones por año
-    df_year = df.groupby('year')[['total_aplicaciones', 'total_contratados']].sum()
-    df_year.plot(kind='bar', ax=axes[0, 0], color=['#3498db', '#2ecc71'])
-    axes[0, 0].set_title('Total de Aplicaciones y Contrataciones por Año', fontweight='bold')
-    axes[0, 0].set_xlabel('Año')
-    axes[0, 0].set_ylabel('Cantidad')
-    axes[0, 0].legend(['Total Aplicaciones', 'Total Contratados'])
-    axes[0, 0].tick_params(axis='x', rotation=45)
-    
-    # 2. Proporción de contratación por año
-    df_prop_year = df.groupby('year')['proporcion_contratacion_pct'].mean()
-    axes[0, 1].plot(df_prop_year.index, df_prop_year.values, marker='o', linewidth=2, markersize=8, color='#e74c3c')
-    axes[0, 1].set_title('Proporción Promedio de Contratación por Año', fontweight='bold')
-    axes[0, 1].set_xlabel('Año')
-    axes[0, 1].set_ylabel('Proporción (%)')
-    axes[0, 1].grid(True, alpha=0.3)
-    
-    # 3. Contrataciones por mes
-    df_month = df.groupby('month_number')[['total_aplicaciones', 'total_contratados']].sum()
-    df_month.plot(kind='bar', ax=axes[1, 0], color=['#3498db', '#2ecc71'])
-    axes[1, 0].set_title('Total de Aplicaciones y Contrataciones por Mes', fontweight='bold')
-    axes[1, 0].set_xlabel('Mes')
-    axes[1, 0].set_ylabel('Cantidad')
-    axes[1, 0].legend(['Total Aplicaciones', 'Total Contratados'])
-    axes[1, 0].tick_params(axis='x', rotation=45)
-    
-    # 4. Contrataciones por día de la semana
-    dias_semana = {0: 'Lunes', 1: 'Martes', 2: 'Miércoles', 3: 'Jueves', 4: 'Viernes', 5: 'Sábado', 6: 'Domingo'}
-    df_day = df.groupby('day_of_week')[['total_aplicaciones', 'total_contratados']].sum()
-    df_day.index = df_day.index.map(dias_semana)
-    df_day.plot(kind='bar', ax=axes[1, 1], color=['#3498db', '#2ecc71'])
-    axes[1, 1].set_title('Total de Aplicaciones y Contrataciones por Día de la Semana', fontweight='bold')
-    axes[1, 1].set_xlabel('Día de la Semana')
-    axes[1, 1].set_ylabel('Cantidad')
-    axes[1, 1].legend(['Total Aplicaciones', 'Total Contratados'])
-    axes[1, 1].tick_params(axis='x', rotation=45)
-    
-    plt.tight_layout()
-    plt.savefig(VISUALIZATIONS_PATH / '01_evolucion_tiempo.png', dpi=300, bbox_inches='tight')
-    print("✓ Gráfica guardada: 01_evolucion_tiempo.png")
-    plt.close()
+
+    df_year = df.groupby("year", as_index=False)[["total_aplicaciones", "total_contratados"]].sum()
+    df_year["tasa_contratacion_pct"] = df_year["total_contratados"] / df_year["total_aplicaciones"] * 100
+    df_month = df.groupby("month_number", as_index=False)[["total_aplicaciones", "total_contratados"]].sum()
+    df_day = df.groupby("day_of_week", as_index=False)[["total_aplicaciones", "total_contratados"]].sum()
+    df_day["tasa_contratacion_pct"] = df_day["total_contratados"] / df_day["total_aplicaciones"] * 100
+
+    month_names = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
+    day_names = ["Lun", "Mar", "Mie", "Jue", "Vie", "Sab", "Dom"]
+    figure, axes = plt.subplots(2, 2, figsize=(16, 10))
+    figure.suptitle("R1 | ¿Cómo evolucionan las contrataciones en el tiempo?", fontsize=16, fontweight="bold")
+
+    axes[0, 0].plot(df_year["year"], df_year["total_aplicaciones"], marker="o", color=APPLICATION_COLOR, label="Aplicaciones")
+    axes[0, 0].plot(df_year["year"], df_year["total_contratados"], marker="o", color=HIRED_COLOR, label="Contratados")
+    axes[0, 0].set_title("Volumen anual de aplicaciones y contrataciones")
+    axes[0, 0].set_ylabel("Candidatos")
+    axes[0, 0].legend(frameon=False)
+
+    axes[0, 1].plot(df_year["year"], df_year["tasa_contratacion_pct"], marker="o", color=RATE_COLOR, linewidth=2)
+    axes[0, 1].set_title("La tasa de contratación anual")
+    axes[0, 1].set_ylabel("Contratados / aplicaciones (%)")
+    axes[0, 1].set_ylim(bottom=0)
+    for _, row in df_year.iterrows():
+        axes[0, 1].annotate(f"{row['tasa_contratacion_pct']:.1f}%", (row["year"], row["tasa_contratacion_pct"]), textcoords="offset points", xytext=(0, 7), ha="center", fontsize=8)
+
+    axes[1, 0].bar(df_month["month_number"], df_month["total_aplicaciones"], color=APPLICATION_COLOR, label="Aplicaciones")
+    axes[1, 0].bar(df_month["month_number"], df_month["total_contratados"], color=HIRED_COLOR, label="Contratados")
+    axes[1, 0].set_title("¿En qué meses se concentra el volumen?")
+    axes[1, 0].set_xlabel("Mes")
+    axes[1, 0].set_ylabel("Candidatos")
+    axes[1, 0].set_xticks(range(1, 13), month_names)
+    axes[1, 0].legend(frameon=False)
+
+    bars = axes[1, 1].bar(df_day["day_of_week"], df_day["tasa_contratacion_pct"], color=RATE_COLOR)
+    axes[1, 1].set_title("¿Qué día tiene mayor tasa de contratación?")
+    axes[1, 1].set_xlabel("Día de la semana")
+    axes[1, 1].set_ylabel("Contratados / aplicaciones (%)")
+    axes[1, 1].set_xticks(range(7), day_names)
+    axes[1, 1].set_ylim(0, max(df_day["tasa_contratacion_pct"].max() * 1.18, 1))
+    add_value_labels(axes[1, 1], bars, "{:.1f}%")
+
+    figure.tight_layout(rect=(0, 0, 1, 0.95))
+    save_figure(figure, "01_evolucion_tiempo.png")
 
 
 # ============================================================
 # QUERY 2: Comparación de contrataciones entre tecnologías
 # ============================================================
 def visualizar_tecnologias():
-    """Query 2: Comparación de tecnologías."""
-    print("\n[2/6] Generando gráfica: Comparación por tecnologías...")
-    
+    """Ordena tecnologías por volumen, tasa y desempeño promedio."""
+    print("\n[2/5] Generando gráfica: Comparación por tecnologías...")
+
     query = """
-    SELECT 
-        t.technology_name,
-        COUNT(*) AS total_candidatos,
-        SUM(f.is_hired) AS cantidad_contratados,
-        ROUND(SUM(f.is_hired) / COUNT(*) * 100, 2) AS proporcion_contratacion_pct,
-        ROUND(AVG(f.code_challenge_score), 2) AS promedio_code_challenge,
-        ROUND(AVG(f.technical_interview_score), 2) AS promedio_technical_interview
+    SELECT t.technology_name, COUNT(*) AS total_candidatos,
+           SUM(f.is_hired) AS cantidad_contratados,
+           AVG(f.code_challenge_score) AS promedio_code_challenge,
+           AVG(f.technical_interview_score) AS promedio_technical_interview
     FROM fact_application AS f
     JOIN dim_technology AS t ON f.technology_key = t.technology_key
-    GROUP BY t.technology_name
-    ORDER BY cantidad_contratados DESC;
+    GROUP BY t.technology_name;
     """
-    
     df = execute_query(query)
     if df is None or df.empty:
         print("✗ No hay datos para visualizar")
         return
-    
-    # Crear subplots
-    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-    fig.suptitle('Análisis de Contrataciones por Tecnología', fontsize=16, fontweight='bold')
-    
-    # 1. Cantidad de contratados por tecnología
-    df_sorted = df.sort_values('cantidad_contratados', ascending=True)
-    axes[0, 0].barh(df_sorted['technology_name'], df_sorted['cantidad_contratados'], color='#3498db')
-    axes[0, 0].set_title('Cantidad de Contratados por Tecnología', fontweight='bold')
-    axes[0, 0].set_xlabel('Cantidad Contratados')
-    
-    # 2. Proporción de contratación por tecnología
-    df_sorted2 = df.sort_values('proporcion_contratacion_pct', ascending=True)
-    axes[0, 1].barh(df_sorted2['technology_name'], df_sorted2['proporcion_contratacion_pct'], color='#2ecc71')
-    axes[0, 1].set_title('Proporción de Contratación por Tecnología (%)', fontweight='bold')
-    axes[0, 1].set_xlabel('Proporción (%)')
-    
-    # 3. Desempeño promedio en evaluaciones
-    df_plot = df.sort_values('cantidad_contratados', ascending=False).head(10)
-    x = range(len(df_plot))
-    axes[1, 0].plot(x, df_plot['promedio_code_challenge'], marker='o', label='Code Challenge', linewidth=2)
-    axes[1, 0].plot(x, df_plot['promedio_technical_interview'], marker='s', label='Technical Interview', linewidth=2)
-    axes[1, 0].set_xticks(x)
-    axes[1, 0].set_xticklabels(df_plot['technology_name'], rotation=45, ha='right')
-    axes[1, 0].set_title('Desempeño Promedio en Evaluaciones (Top 10)', fontweight='bold')
-    axes[1, 0].set_ylabel('Score Promedio')
-    axes[1, 0].legend()
-    axes[1, 0].grid(True, alpha=0.3)
-    
-    # 4. Relación entre candidatos aplicados y contratados
-    df_sorted3 = df.sort_values('total_candidatos', ascending=False).head(10)
-    x_pos = range(len(df_sorted3))
-    width = 0.35
-    axes[1, 1].bar([i - width/2 for i in x_pos], df_sorted3['total_candidatos'], width, label='Total Candidatos', color='#3498db')
-    axes[1, 1].bar([i + width/2 for i in x_pos], df_sorted3['cantidad_contratados'], width, label='Contratados', color='#2ecc71')
-    axes[1, 1].set_xticks(x_pos)
-    axes[1, 1].set_xticklabels(df_sorted3['technology_name'], rotation=45, ha='right')
-    axes[1, 1].set_title('Candidatos Aplicados vs Contratados (Top 10)', fontweight='bold')
-    axes[1, 1].set_ylabel('Cantidad')
-    axes[1, 1].legend()
-    
-    plt.tight_layout()
-    plt.savefig(VISUALIZATIONS_PATH / '02_tecnologias.png', dpi=300, bbox_inches='tight')
-    print("✓ Gráfica guardada: 02_tecnologias.png")
-    plt.close()
+
+    df["proporcion_contratacion_pct"] = df["cantidad_contratados"] / df["total_candidatos"] * 100
+    by_hires = df.sort_values("cantidad_contratados").tail(15)
+    by_rate = df.sort_values("proporcion_contratacion_pct").tail(15)
+    by_score = df.sort_values("total_candidatos", ascending=False).head(15).sort_values("promedio_technical_interview")
+
+    figure, axes = plt.subplots(1, 3, figsize=(19, 9))
+    figure.suptitle("R2 | ¿Qué tecnologías producen más y mejores contrataciones?", fontsize=16, fontweight="bold")
+
+    axes[0].barh(by_hires["technology_name"], by_hires["total_candidatos"], color=APPLICATION_COLOR, label="Aplicaciones")
+    axes[0].barh(by_hires["technology_name"], by_hires["cantidad_contratados"], color=HIRED_COLOR, label="Contratados")
+    axes[0].set_title("Top 15 por cantidad de contratados")
+    axes[0].set_xlabel("Candidatos")
+    axes[0].legend(frameon=False, loc="lower right")
+
+    bars = axes[1].barh(by_rate["technology_name"], by_rate["proporcion_contratacion_pct"], color=RATE_COLOR)
+    axes[1].set_title("Top 15 por tasa de contratación")
+    axes[1].set_xlabel("Contratados / aplicaciones (%)")
+    axes[1].set_xlim(0, max(by_rate["proporcion_contratacion_pct"].max() * 1.2, 1))
+    add_value_labels(axes[1], bars, "{:.1f}%")
+
+    y_positions = range(len(by_score))
+    axes[2].scatter(by_score["promedio_code_challenge"], y_positions, color=CODE_COLOR, s=55, label="Code Challenge", zorder=3)
+    axes[2].scatter(by_score["promedio_technical_interview"], y_positions, color=INTERVIEW_COLOR, s=55, label="Technical Interview", zorder=3)
+    for position, (_, row) in enumerate(by_score.iterrows()):
+        axes[2].plot([row["promedio_code_challenge"], row["promedio_technical_interview"]], [position, position], color="#adb5bd", linewidth=1)
+    axes[2].set_yticks(list(y_positions), by_score["technology_name"])
+    axes[2].set_title("Promedio de evaluaciones\n(15 tecnologías con más aplicaciones)")
+    axes[2].set_xlabel("Puntaje promedio (0 a 10)")
+    axes[2].set_xlim(0, 10)
+    axes[2].legend(frameon=False, loc="lower right")
+
+    figure.tight_layout(rect=(0, 0, 1, 0.95))
+    save_figure(figure, "02_tecnologias.png")
 
 
 # ============================================================
 # QUERY 3: Análisis por seniority y experiencia
 # ============================================================
 def visualizar_seniority_experiencia():
-    """Query 3: Análisis por seniority y años de experiencia."""
-    print("\n[3/6] Generando gráfica: Análisis por seniority y experiencia...")
-    
+    """Compara resultados de contratación por seniority y años de experiencia."""
+    print("\n[3/5] Generando gráfica: Análisis por seniority y años de experiencia...")
+
     query = """
-    SELECT 
-        s.seniority_name,
-        f.yoe AS anos_experiencia,
-        COUNT(*) AS total_candidatos,
-        SUM(f.is_hired) AS cantidad_contratados,
-        ROUND(SUM(f.is_hired) / COUNT(*) * 100, 2) AS proporcion_contratacion_pct,
-        ROUND(AVG(f.code_challenge_score), 2) AS promedio_code_challenge,
-        ROUND(AVG(f.technical_interview_score), 2) AS promedio_technical_interview
+    SELECT s.seniority_name, f.yoe AS anos_experiencia, COUNT(*) AS total_candidatos,
+           SUM(f.is_hired) AS cantidad_contratados,
+           AVG(f.code_challenge_score) AS promedio_code_challenge,
+           AVG(f.technical_interview_score) AS promedio_technical_interview
     FROM fact_application AS f
     JOIN dim_seniority AS s ON f.seniority_key = s.seniority_key
-    GROUP BY s.seniority_name, f.yoe
-    ORDER BY s.seniority_name, f.yoe;
+    GROUP BY s.seniority_name, f.yoe;
     """
-    
     df = execute_query(query)
     if df is None or df.empty:
         print("✗ No hay datos para visualizar")
         return
-    
-    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-    fig.suptitle('Análisis de Contrataciones por Seniority y Años de Experiencia', fontsize=16, fontweight='bold')
-    
-    # 1. Contratados por seniority
-    df_sen = df.groupby('seniority_name')[['cantidad_contratados']].sum().sort_values('cantidad_contratados', ascending=False)
-    axes[0, 0].bar(df_sen.index, df_sen['cantidad_contratados'], color='#3498db')
-    axes[0, 0].set_title('Total Contratados por Nivel de Seniority', fontweight='bold')
-    axes[0, 0].set_ylabel('Cantidad Contratados')
-    axes[0, 0].tick_params(axis='x', rotation=45)
-    
-    # 2. Proporción de contratación por seniority
-    df_prop_sen = df.groupby('seniority_name')['proporcion_contratacion_pct'].mean().sort_values(ascending=False)
-    axes[0, 1].bar(df_prop_sen.index, df_prop_sen.values, color='#2ecc71')
-    axes[0, 1].set_title('Proporción Promedio de Contratación por Seniority', fontweight='bold')
-    axes[0, 1].set_ylabel('Proporción (%)')
-    axes[0, 1].tick_params(axis='x', rotation=45)
-    
-    # 3. Contratados por seniority y experiencia (heatmap)
-    pivot_table = df.pivot_table(values='cantidad_contratados', index='seniority_name', columns='anos_experiencia', fill_value=0)
-    sns.heatmap(pivot_table, annot=True, fmt='g', cmap='YlGn', ax=axes[1, 0], cbar_kws={'label': 'Cantidad Contratados'})
-    axes[1, 0].set_title('Heatmap: Contratados por Seniority y Años de Experiencia', fontweight='bold')
-    axes[1, 0].set_ylabel('Nivel de Seniority')
-    axes[1, 0].set_xlabel('Años de Experiencia')
-    
-    # 4. Proporción de contratación por seniority y experiencia
-    pivot_prop = df.pivot_table(values='proporcion_contratacion_pct', index='seniority_name', columns='anos_experiencia', fill_value=0)
-    sns.heatmap(pivot_prop, annot=True, fmt='.1f', cmap='RdYlGn', ax=axes[1, 1], cbar_kws={'label': 'Proporción (%)'})
-    axes[1, 1].set_title('Heatmap: Proporción de Contratación por Seniority y Experiencia', fontweight='bold')
-    axes[1, 1].set_ylabel('Nivel de Seniority')
-    axes[1, 1].set_xlabel('Años de Experiencia')
-    
-    plt.tight_layout()
-    plt.savefig(VISUALIZATIONS_PATH / '03_seniority_experiencia.png', dpi=300, bbox_inches='tight')
-    print("✓ Gráfica guardada: 03_seniority_experiencia.png")
-    plt.close()
+
+    df["proporcion_contratacion_pct"] = df["cantidad_contratados"] / df["total_candidatos"] * 100
+    seniority = df.groupby("seniority_name", as_index=False)[["total_candidatos", "cantidad_contratados"]].sum()
+    seniority["proporcion_contratacion_pct"] = seniority["cantidad_contratados"] / seniority["total_candidatos"] * 100
+    experience = df.groupby("anos_experiencia", as_index=False)[["total_candidatos", "cantidad_contratados"]].sum()
+    experience["proporcion_contratacion_pct"] = experience["cantidad_contratados"] / experience["total_candidatos"] * 100
+    scores = df.groupby("seniority_name", as_index=False)[["promedio_code_challenge", "promedio_technical_interview"]].mean().sort_values("promedio_technical_interview")
+
+    figure, axes = plt.subplots(2, 2, figsize=(16, 11))
+    figure.suptitle("R3 | ¿Qué perfiles, por seniority y experiencia, se contratan más?", fontsize=16, fontweight="bold")
+
+    seniority_sorted = seniority.sort_values("cantidad_contratados")
+    axes[0, 0].barh(seniority_sorted["seniority_name"], seniority_sorted["total_candidatos"], color=APPLICATION_COLOR, label="Aplicaciones")
+    axes[0, 0].barh(seniority_sorted["seniority_name"], seniority_sorted["cantidad_contratados"], color=HIRED_COLOR, label="Contratados")
+    axes[0, 0].set_title("Volumen de contratación por seniority")
+    axes[0, 0].set_xlabel("Candidatos")
+    axes[0, 0].legend(frameon=False)
+
+    axes[0, 1].plot(experience["anos_experiencia"], experience["proporcion_contratacion_pct"], color=RATE_COLOR, marker="o", linewidth=2)
+    axes[0, 1].set_title("Tasa de contratación según experiencia")
+    axes[0, 1].set_xlabel("Años de experiencia")
+    axes[0, 1].set_ylabel("Contratados / aplicaciones (%)")
+    axes[0, 1].set_ylim(bottom=0)
+
+    axes[1, 0].plot(experience["anos_experiencia"], experience["total_candidatos"], color=APPLICATION_COLOR, marker="o", label="Aplicaciones")
+    axes[1, 0].plot(experience["anos_experiencia"], experience["cantidad_contratados"], color=HIRED_COLOR, marker="o", label="Contratados")
+    axes[1, 0].set_title("Aplicaciones y contratados por años de experiencia")
+    axes[1, 0].set_xlabel("Años de experiencia")
+    axes[1, 0].set_ylabel("Candidatos")
+    axes[1, 0].legend(frameon=False)
+
+    y_positions = range(len(scores))
+    axes[1, 1].scatter(scores["promedio_code_challenge"], y_positions, color=CODE_COLOR, s=55, label="Code Challenge")
+    axes[1, 1].scatter(scores["promedio_technical_interview"], y_positions, color=INTERVIEW_COLOR, s=55, label="Technical Interview")
+    for position, (_, row) in enumerate(scores.iterrows()):
+        axes[1, 1].plot([row["promedio_code_challenge"], row["promedio_technical_interview"]], [position, position], color="#adb5bd", linewidth=1)
+    axes[1, 1].set_yticks(list(y_positions), scores["seniority_name"])
+    axes[1, 1].set_title("Desempeño técnico promedio por seniority")
+    axes[1, 1].set_xlabel("Puntaje promedio (0 a 10)")
+    axes[1, 1].set_xlim(0, 10)
+    axes[1, 1].legend(frameon=False)
+
+    figure.tight_layout(rect=(0, 0, 1, 0.95))
+    save_figure(figure, "03_seniority_experiencia.png")
 
 
 # ============================================================
 # QUERY 4: Desempeño técnico por país y experiencia
 # ============================================================
 def visualizar_pais_experiencia():
-    """Query 4: Desempeño técnico por país y experiencia."""
-    print("\n[4/6] Generando gráfica: Desempeño por país y experiencia...")
-    
+    """Muestra desempeño y contratación por experiencia y países con mayor volumen."""
+    print("\n[4/5] Generando gráfica: Desempeño por país y experiencia...")
+
     query = """
-    SELECT 
-        c.country_name,
-        f.yoe AS anos_experiencia,
-        COUNT(*) AS total_candidatos,
-        ROUND(AVG(f.code_challenge_score), 2) AS promedio_code_challenge,
-        ROUND(AVG(f.technical_interview_score), 2) AS promedio_technical_interview,
-        SUM(f.is_hired) AS cantidad_contratados,
-        ROUND(SUM(f.is_hired) / COUNT(*) * 100, 2) AS proporcion_contratacion_pct
+    SELECT c.country_name, f.yoe AS anos_experiencia, COUNT(*) AS total_candidatos,
+           AVG(f.code_challenge_score) AS promedio_code_challenge,
+           AVG(f.technical_interview_score) AS promedio_technical_interview,
+           SUM(f.is_hired) AS cantidad_contratados
     FROM fact_application AS f
     JOIN dim_country AS c ON f.country_key = c.country_key
-    GROUP BY c.country_name, f.yoe
-    ORDER BY c.country_name, f.yoe;
+    GROUP BY c.country_name, f.yoe;
     """
-    
     df = execute_query(query)
     if df is None or df.empty:
         print("✗ No hay datos para visualizar")
         return
-    
-    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-    fig.suptitle('Desempeño Técnico por País y Años de Experiencia', fontsize=16, fontweight='bold')
-    
-    # 1. Top 10 países por cantidad de contratados
-    df_top_paises = df.groupby('country_name')[['cantidad_contratados']].sum().sort_values('cantidad_contratados', ascending=False).head(10)
-    axes[0, 0].barh(df_top_paises.index, df_top_paises['cantidad_contratados'], color='#3498db')
-    axes[0, 0].set_title('Top 10 Países por Cantidad de Contratados', fontweight='bold')
-    axes[0, 0].set_xlabel('Cantidad Contratados')
-    
-    # 2. Top 10 países por proporción de contratación
-    df_prop_paises = df.groupby('country_name')['proporcion_contratacion_pct'].mean().sort_values(ascending=False).head(10)
-    axes[0, 1].barh(df_prop_paises.index, df_prop_paises.values, color='#2ecc71')
-    axes[0, 1].set_title('Top 10 Países por Proporción de Contratación', fontweight='bold')
-    axes[0, 1].set_xlabel('Proporción (%)')
-    
-    # 3. Desempeño promedio por experiencia (todas las regiones)
-    df_exp = df.groupby('anos_experiencia')[['promedio_code_challenge', 'promedio_technical_interview']].mean()
-    axes[1, 0].plot(df_exp.index, df_exp['promedio_code_challenge'], marker='o', label='Code Challenge', linewidth=2)
-    axes[1, 0].plot(df_exp.index, df_exp['promedio_technical_interview'], marker='s', label='Technical Interview', linewidth=2)
-    axes[1, 0].set_title('Desempeño Promedio según Años de Experiencia', fontweight='bold')
-    axes[1, 0].set_xlabel('Años de Experiencia')
-    axes[1, 0].set_ylabel('Score Promedio')
-    axes[1, 0].legend()
-    axes[1, 0].grid(True, alpha=0.3)
-    
-    # 4. Proporción de contratación por experiencia
-    df_prop_exp = df.groupby('anos_experiencia')['proporcion_contratacion_pct'].mean()
-    axes[1, 1].plot(df_prop_exp.index, df_prop_exp.values, marker='o', linewidth=2, markersize=8, color='#e74c3c')
-    axes[1, 1].set_title('Proporción de Contratación según Años de Experiencia', fontweight='bold')
-    axes[1, 1].set_xlabel('Años de Experiencia')
-    axes[1, 1].set_ylabel('Proporción (%)')
-    axes[1, 1].grid(True, alpha=0.3)
-    
-    plt.tight_layout()
-    plt.savefig(VISUALIZATIONS_PATH / '04_pais_experiencia.png', dpi=300, bbox_inches='tight')
-    print("✓ Gráfica guardada: 04_pais_experiencia.png")
-    plt.close()
+
+    df["proporcion_contratacion_pct"] = df["cantidad_contratados"] / df["total_candidatos"] * 100
+    df["code_score_total"] = df["promedio_code_challenge"] * df["total_candidatos"]
+    df["interview_score_total"] = df["promedio_technical_interview"] * df["total_candidatos"]
+    country = df.groupby("country_name", as_index=False)[[
+        "total_candidatos", "cantidad_contratados", "code_score_total", "interview_score_total"
+    ]].sum()
+    country["promedio_code_challenge"] = country["code_score_total"] / country["total_candidatos"]
+    country["promedio_technical_interview"] = country["interview_score_total"] / country["total_candidatos"]
+    country["proporcion_contratacion_pct"] = country["cantidad_contratados"] / country["total_candidatos"] * 100
+    top_countries = country.nlargest(12, "total_candidatos")["country_name"].tolist()
+    top = country[country["country_name"].isin(top_countries)]
+    experience = df.groupby("anos_experiencia", as_index=False)[[
+        "total_candidatos", "cantidad_contratados", "code_score_total", "interview_score_total"
+    ]].sum()
+    experience["promedio_code_challenge"] = experience["code_score_total"] / experience["total_candidatos"]
+    experience["promedio_technical_interview"] = experience["interview_score_total"] / experience["total_candidatos"]
+    experience["proporcion_contratacion_pct"] = experience["cantidad_contratados"] / experience["total_candidatos"] * 100
+
+    figure, axes = plt.subplots(2, 2, figsize=(17, 11))
+    figure.suptitle("R4 | ¿Cómo cambia el desempeño técnico por país y experiencia?", fontsize=16, fontweight="bold")
+
+    top = top.sort_values("proporcion_contratacion_pct")
+    axes[0, 0].barh(top["country_name"], top["proporcion_contratacion_pct"], color=RATE_COLOR)
+    axes[0, 0].set_title("Tasa de contratación\n(12 países con más aplicaciones)")
+    axes[0, 0].set_xlabel("Contratados / aplicaciones (%)")
+
+    top_scores = top.sort_values("promedio_technical_interview")
+    y_positions = range(len(top_scores))
+    axes[0, 1].scatter(top_scores["promedio_code_challenge"], y_positions, color=CODE_COLOR, s=50, label="Code Challenge")
+    axes[0, 1].scatter(top_scores["promedio_technical_interview"], y_positions, color=INTERVIEW_COLOR, s=50, label="Technical Interview")
+    axes[0, 1].set_yticks(list(y_positions), top_scores["country_name"])
+    axes[0, 1].set_title("Puntajes promedio por país\n(12 países con más aplicaciones)")
+    axes[0, 1].set_xlabel("Puntaje promedio (0 a 10)")
+    axes[0, 1].set_xlim(0, 10)
+    axes[0, 1].legend(frameon=False, loc="lower right")
+
+    axes[1, 0].plot(experience["anos_experiencia"], experience["promedio_code_challenge"], color=CODE_COLOR, marker="o", label="Code Challenge")
+    axes[1, 0].plot(experience["anos_experiencia"], experience["promedio_technical_interview"], color=INTERVIEW_COLOR, marker="o", label="Technical Interview")
+    axes[1, 0].set_title("Puntajes promedio según años de experiencia")
+    axes[1, 0].set_xlabel("Años de experiencia")
+    axes[1, 0].set_ylabel("Puntaje promedio (0 a 10)")
+    axes[1, 0].set_ylim(0, 10)
+    axes[1, 0].legend(frameon=False)
+
+    axes[1, 1].plot(experience["anos_experiencia"], experience["proporcion_contratacion_pct"], color=RATE_COLOR, marker="o", linewidth=2)
+    axes[1, 1].set_title("Tasa de contratación según experiencia")
+    axes[1, 1].set_xlabel("Años de experiencia")
+    axes[1, 1].set_ylabel("Contratados / aplicaciones (%)")
+    axes[1, 1].set_ylim(bottom=0)
+
+    figure.tight_layout(rect=(0, 0, 1, 0.95))
+    save_figure(figure, "04_pais_experiencia.png")
 
 
 # ============================================================
 # QUERY 5: Diferencias Code Challenge vs Technical Interview
 # ============================================================
 def visualizar_diferencia_evaluaciones():
-    """Query 5: Diferencias entre evaluaciones."""
-    print("\n[5/6] Generando gráfica: Diferencia entre evaluaciones...")
-    
+    """Explica la magnitud, dirección y proporción de las brechas entre evaluaciones."""
+    print("\n[5/5] Generando gráfica: Diferencia entre evaluaciones...")
+
     query = """
-    SELECT 
-        ROUND(AVG(f.code_challenge_score), 2) AS promedio_code_challenge,
-        ROUND(AVG(f.technical_interview_score), 2) AS promedio_technical_interview,
-        ROUND(AVG(f.score_gap), 2) AS promedio_diferencia,
-        COUNT(*) AS total_candidatos,
-        SUM(CASE WHEN f.score_gap > 0 THEN 1 ELSE 0 END) AS candidatos_mejor_en_code,
-        SUM(CASE WHEN f.score_gap < 0 THEN 1 ELSE 0 END) AS candidatos_mejor_en_interview,
-        SUM(CASE WHEN f.score_gap = 0 THEN 1 ELSE 0 END) AS candidatos_igual_en_ambas
+    SELECT f.code_challenge_score, f.technical_interview_score, f.score_gap, f.is_hired
     FROM fact_application AS f;
     """
-    
     df = execute_query(query)
     if df is None or df.empty:
         print("✗ No hay datos para visualizar")
         return
-    
-    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-    fig.suptitle('Análisis de Diferencias entre Code Challenge y Technical Interview', fontsize=16, fontweight='bold')
-    
-    # 1. Comparación de promedios
-    evaluaciones = ['Code Challenge', 'Technical Interview']
-    promedios = [df['promedio_code_challenge'].iloc[0], df['promedio_technical_interview'].iloc[0]]
-    axes[0, 0].bar(evaluaciones, promedios, color=['#3498db', '#2ecc71'])
-    axes[0, 0].set_title('Promedio de Scores por Evaluación', fontweight='bold')
-    axes[0, 0].set_ylabel('Score Promedio')
-    for i, v in enumerate(promedios):
-        axes[0, 0].text(i, v + 0.1, f'{v:.2f}', ha='center', fontweight='bold')
-    
-    # 2. Distribución de candidatos por desempeño relativo
-    categorias = ['Mejor en Code\nChallenge', 'Mejor en Technical\nInterview', 'Igual en Ambas']
-    valores = [
-        df['candidatos_mejor_en_code'].iloc[0],
-        df['candidatos_mejor_en_interview'].iloc[0],
-        df['candidatos_igual_en_ambas'].iloc[0]
-    ]
-    colors = ['#3498db', '#e74c3c', '#f39c12']
-    axes[0, 1].pie(valores, labels=categorias, autopct='%1.1f%%', colors=colors, startangle=90)
-    axes[0, 1].set_title('Distribución de Candidatos por Desempeño Relativo', fontweight='bold')
-    
-    # 3. Diferencia promedio (score_gap)
-    axes[1, 0].text(0.5, 0.5, f'Score Gap Promedio:\n{df["promedio_diferencia"].iloc[0]:.2f}', 
-                   ha='center', va='center', fontsize=20, fontweight='bold',
-                   bbox=dict(boxstyle='round', facecolor='#f0f0f0', alpha=0.8))
-    axes[1, 0].axis('off')
-    axes[1, 0].set_title('Score Gap Promedio (Code Challenge - Technical Interview)', fontweight='bold')
-    
-    # 4. Resumen de métricas
-    axes[1, 1].axis('off')
-    metrics_text = f"""
-MÉTRICAS GLOBALES
 
-Total de Candidatos: {int(df['total_candidatos'].iloc[0]):,}
+    categories = pd.Series({
+        "Mejor en entrevista": (df["score_gap"] > 0).sum(),
+        "Igual en ambas": (df["score_gap"] == 0).sum(),
+        "Mejor en code challenge": (df["score_gap"] < 0).sum(),
+    }).sort_values()
+    total_candidates = len(df)
+    average_code = df["code_challenge_score"].mean()
+    average_interview = df["technical_interview_score"].mean()
+    average_gap = df["score_gap"].mean()
 
-Promedio Code Challenge: {df['promedio_code_challenge'].iloc[0]:.2f}
-Promedio Technical Interview: {df['promedio_technical_interview'].iloc[0]:.2f}
-Diferencia Promedio: {df['promedio_diferencia'].iloc[0]:.2f}
+    figure, axes = plt.subplots(2, 2, figsize=(16, 10))
+    figure.suptitle("R5 | ¿Dónde cambia el desempeño entre las dos evaluaciones?", fontsize=16, fontweight="bold")
 
-Mejor en Code Challenge: {int(df['candidatos_mejor_en_code'].iloc[0]):,} ({int(df['candidatos_mejor_en_code'].iloc[0])/int(df['total_candidatos'].iloc[0])*100:.1f}%)
-Mejor en Technical Interview: {int(df['candidatos_mejor_en_interview'].iloc[0]):,} ({int(df['candidatos_mejor_en_interview'].iloc[0])/int(df['total_candidatos'].iloc[0])*100:.1f}%)
-Igual en Ambas: {int(df['candidatos_igual_en_ambas'].iloc[0]):,} ({int(df['candidatos_igual_en_ambas'].iloc[0])/int(df['total_candidatos'].iloc[0])*100:.1f}%)
-    """
-    axes[1, 1].text(0.1, 0.5, metrics_text, fontsize=11, verticalalignment='center', 
-                   family='monospace', bbox=dict(boxstyle='round', facecolor='#f0f0f0', alpha=0.8))
-    
-    plt.tight_layout()
-    plt.savefig(VISUALIZATIONS_PATH / '05_diferencia_evaluaciones.png', dpi=300, bbox_inches='tight')
-    print("✓ Gráfica guardada: 05_diferencia_evaluaciones.png")
-    plt.close()
+    axes[0, 0].bar(["Code Challenge", "Technical Interview"], [average_code, average_interview], color=[CODE_COLOR, INTERVIEW_COLOR])
+    axes[0, 0].set_title("Puntaje promedio por etapa")
+    axes[0, 0].set_ylabel("Puntaje promedio (0 a 10)")
+    axes[0, 0].set_ylim(0, 10)
+    for position, value in enumerate([average_code, average_interview]):
+        axes[0, 0].text(position, value + 0.2, f"{value:.2f}", ha="center", fontweight="bold")
+
+    axes[0, 1].hist(df["score_gap"], bins=21, color="#f4a261", edgecolor="white", align="left")
+    axes[0, 1].axvline(0, color="#264653", linestyle="--", linewidth=1.5)
+    axes[0, 1].axvline(average_gap, color=RATE_COLOR, linestyle="-", linewidth=2, label=f"Promedio: {average_gap:.2f}")
+    axes[0, 1].set_title("Distribución de la brecha de evaluación")
+    axes[0, 1].set_xlabel("Score gap = entrevista - code challenge")
+    axes[0, 1].set_ylabel("Candidatos")
+    axes[0, 1].legend(frameon=False)
+
+    bars = axes[1, 0].barh(categories.index, categories.values, color=[CODE_COLOR, "#adb5bd", HIRED_COLOR])
+    axes[1, 0].set_title("¿En qué evaluación rinden mejor?")
+    axes[1, 0].set_xlabel("Candidatos")
+    add_value_labels(axes[1, 0], bars)
+    for bar, value in zip(bars, categories.values):
+        axes[1, 0].text(value, bar.get_y() + bar.get_height() / 2, f" ({value / total_candidates * 100:.1f}%)", va="center", fontsize=8)
+
+    axes[1, 1].axis("off")
+    metrics = (
+        "KPI GLOBALES\n\n"
+        f"Candidatos analizados: {total_candidates:,}\n"
+        f"Promedio Code Challenge: {average_code:.2f}\n"
+        f"Promedio Technical Interview: {average_interview:.2f}\n"
+        f"Score gap promedio: {average_gap:.2f}\n\n"
+        "Gap positivo = mejor entrevista\n"
+        "Gap negativo = mejor code challenge"
+    )
+    axes[1, 1].text(0.08, 0.5, metrics, va="center", fontsize=13, family="monospace")
+
+    figure.tight_layout(rect=(0, 0, 1, 0.95))
+    save_figure(figure, "05_diferencia_evaluaciones.png")
 
 
-# ============================================================
-# QUERY 6: Tendencias por género estimado
-# ============================================================
-def visualizar_genero():
-    """Query 6: Tendencias por género estimado."""
-    print("\n[6/6] Generando gráfica: Tendencias por género...")
-    
-    query = """
-    SELECT 
-        COALESCE(dc.gender_estimated, 'UNKNOWN') AS genero_estimado,
-        COUNT(*) AS total_candidatos,
-        SUM(f.is_hired) AS cantidad_contratados,
-        ROUND(SUM(f.is_hired) / COUNT(*) * 100, 2) AS proporcion_contratacion_pct,
-        ROUND(AVG(f.code_challenge_score), 2) AS promedio_code_challenge,
-        ROUND(AVG(f.technical_interview_score), 2) AS promedio_technical_interview,
-        ROUND(AVG(f.yoe), 2) AS promedio_anos_experiencia
-    FROM fact_application AS f
-    JOIN dim_candidate AS dc ON f.candidate_key = dc.candidate_key
-    GROUP BY dc.gender_estimated
-    ORDER BY cantidad_contratados DESC;
-    """
-    
-    df = execute_query(query)
-    if df is None or df.empty:
-        print("✗ No hay datos para visualizar")
-        return
-    
-    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-    fig.suptitle('Análisis de Contrataciones por Género Estimado', fontsize=16, fontweight='bold')
-    
-    # 1. Total de candidatos por género
-    axes[0, 0].pie(df['total_candidatos'], labels=df['genero_estimado'], autopct='%1.1f%%',
-                  colors=['#3498db', '#e74c3c', '#f39c12', '#95a5a6'])
-    axes[0, 0].set_title('Distribución de Candidatos por Género', fontweight='bold')
-    
-    # 2. Cantidad de contratados por género
-    axes[0, 1].bar(df['genero_estimado'], df['cantidad_contratados'], color=['#3498db', '#e74c3c', '#f39c12', '#95a5a6'][:len(df)])
-    axes[0, 1].set_title('Cantidad de Contratados por Género', fontweight='bold')
-    axes[0, 1].set_ylabel('Cantidad Contratados')
-    axes[0, 1].tick_params(axis='x', rotation=45)
-    
-    # 3. Proporción de contratación por género
-    axes[1, 0].bar(df['genero_estimado'], df['proporcion_contratacion_pct'], color=['#3498db', '#e74c3c', '#f39c12', '#95a5a6'][:len(df)])
-    axes[1, 0].set_title('Proporción de Contratación por Género (%)', fontweight='bold')
-    axes[1, 0].set_ylabel('Proporción (%)')
-    axes[1, 0].tick_params(axis='x', rotation=45)
-    
-    # 4. Desempeño y experiencia por género
-    ax4 = axes[1, 1]
-    x = range(len(df))
-    ax4_twin = ax4.twinx()
-    
-    bar1 = ax4.bar([i - 0.2 for i in x], df['promedio_code_challenge'], 0.4, label='Code Challenge', color='#3498db')
-    bar2 = ax4.bar([i + 0.2 for i in x], df['promedio_technical_interview'], 0.4, label='Technical Interview', color='#2ecc71')
-    line = ax4_twin.plot(x, df['promedio_anos_experiencia'], 'o-', label='Años de Experiencia', color='#e74c3c', linewidth=2, markersize=8)
-    
-    ax4.set_xticks(x)
-    ax4.set_xticklabels(df['genero_estimado'], rotation=45, ha='right')
-    ax4.set_ylabel('Score Promedio', color='black')
-    ax4_twin.set_ylabel('Años de Experiencia', color='#e74c3c')
-    ax4.set_title('Desempeño y Experiencia por Género', fontweight='bold')
-    ax4.legend(loc='upper left')
-    ax4_twin.legend(loc='upper right')
-    ax4.grid(True, alpha=0.3)
-    
-    plt.tight_layout()
-    plt.savefig(VISUALIZATIONS_PATH / '06_genero.png', dpi=300, bbox_inches='tight')
-    print("✓ Gráfica guardada: 06_genero.png")
-    plt.close()
-
-
-# ============================================================
-# FUNCIÓN PRINCIPAL
-# ============================================================
 def main():
-    """Ejecuta todas las visualizaciones."""
+    """Ejecuta las cinco visualizaciones de los requisitos R1 a R5."""
     print("=" * 70)
-    print("GENERACIÓN DE GRÁFICAS ANALÍTICAS")
+    print("GENERACIÓN DE GRÁFICAS ANALÍTICAS R1-R5")
     print("=" * 70)
-    
     visualizar_evolucion_tiempo()
     visualizar_tecnologias()
     visualizar_seniority_experiencia()
     visualizar_pais_experiencia()
     visualizar_diferencia_evaluaciones()
-    visualizar_genero()
-    
     print("\n" + "=" * 70)
     print("✓ Todas las gráficas han sido generadas exitosamente")
     print(f"✓ Ubicación: {VISUALIZATIONS_PATH}")

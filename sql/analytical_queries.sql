@@ -77,8 +77,8 @@ SELECT
     ROUND(AVG(f.technical_interview_score), 2) AS promedio_technical_interview,
     ROUND(AVG(f.score_gap), 2) AS promedio_diferencia,
     COUNT(*) AS total_candidatos,
-    SUM(CASE WHEN f.score_gap > 0 THEN 1 ELSE 0 END) AS candidatos_mejor_en_code,
-    SUM(CASE WHEN f.score_gap < 0 THEN 1 ELSE 0 END) AS candidatos_mejor_en_interview,
+    SUM(CASE WHEN f.score_gap < 0 THEN 1 ELSE 0 END) AS candidatos_mejor_en_code,
+    SUM(CASE WHEN f.score_gap > 0 THEN 1 ELSE 0 END) AS candidatos_mejor_en_interview,
     SUM(CASE WHEN f.score_gap = 0 THEN 1 ELSE 0 END) AS candidatos_igual_en_ambas
 FROM fact_application AS f;
 
@@ -87,15 +87,3 @@ FROM fact_application AS f;
 -- QUERY 6: Tendencias de contratación por género estimado
 -- ============================================================
 -- Analiza proporciones y tendencias de contratación según género estimado
-SELECT 
-    COALESCE(dc.gender_estimated, 'UNKNOWN') AS genero_estimado,
-    COUNT(*) AS total_candidatos,
-    SUM(f.is_hired) AS cantidad_contratados,
-    ROUND(SUM(f.is_hired) / COUNT(*) * 100, 2) AS proporcion_contratacion_pct,
-    ROUND(AVG(f.code_challenge_score), 2) AS promedio_code_challenge,
-    ROUND(AVG(f.technical_interview_score), 2) AS promedio_technical_interview,
-    ROUND(AVG(f.yoe), 2) AS promedio_anos_experiencia
-FROM fact_application AS f
-JOIN dim_candidate AS dc ON f.candidate_key = dc.candidate_key
-GROUP BY dc.gender_estimated
-ORDER BY cantidad_contratados DESC;

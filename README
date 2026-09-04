@@ -13,7 +13,7 @@ Candidate performance is evaluated through two technical assessments:
 - **Code Challenge Score**
 - **Technical Interview Score**
 
-Currently, candidate application data is only available as raw files. The organization needs an analytical system that allows decision-makers to understand hiring patterns and evaluate recruitment performance from multiple perspectives (time, technology, seniority, geography, and gender).
+Currently, candidate application data is only available as raw files. The organization needs an analytical system that allows decision-makers to understand hiring patterns and evaluate recruitment performance from multiple perspectives (time, technology, seniority, and geography).
 
 **Hiring Outcome Business Rule**
 
@@ -33,17 +33,16 @@ Otherwise, the candidate is **NOT HIRED**.
 | R4 | Technical performance analysis | Analyze candidate performance in the Code Challenge and Technical Interview based on years of experience and country of origin, to identify differences in technical performance across experience levels and geographic regions. |
 | R5 | Evaluation gap analysis | Identify relevant differences between Code Challenge and Technical Interview results to detect profiles whose performance varies between evaluation stages. |
 
-> **Additional (bonus) requirement:** Analyze hiring trends and proportions based on estimated gender (derived from candidate first name), to identify possible differences in selection outcomes across gender groups.
 
 ## 4. Requirements Traceability
 
 | Requirement | Required Dimension(s) | Required Measure(s) | Supported? |
 |---|---|---|---|
-| R1 | DimDate | cantidad_contrataciones (hires count) | ✅ Yes |
-| R2 | DimTechnology | proporcion_contratados (hiring rate) | ✅ Yes |
-| R3 | DimSeniority | cantidad_contrataciones (hires count) | ✅ Yes |
-| R4 | DimCountry | cantidad_contrataciones (hires count) | ✅ Yes |
-| R5 | DimCandidate | cantidad_contrataciones (hires count) | ✅ Yes |
+| R1 | DimDate | `COUNT(*)`, `SUM(is_hired)` | ✅ Yes |
+| R2 | DimTechnology | `COUNT(*)`, `SUM(is_hired)` | ✅ Yes |
+| R3 | DimSeniority | `COUNT(*)`, `SUM(is_hired)` | ✅ Yes |
+| R4 | DimCountry | `COUNT(*)`, `SUM(is_hired)` | ✅ Yes |
+| R5 | DimCandidate | `COUNT(*)`, `SUM(is_hired)` | ✅ Yes |
 
 ## 5. Dataset Description
 
@@ -81,7 +80,7 @@ Candidates submit an application, which is registered along with their country, 
 
 ## 8. Grain Definition
 
-Each row of **FactApplication** represents one candidate's application to the selection process for a given technology, registered on a specific application date, including their years of professional experience, seniority level, results obtained in the Code Challenge and Technical Interview, estimated gender, and final hiring outcome (`is_hired`).
+Each row of **FactApplication** represents one candidate's application to the selection process for a given technology, registered on a specific application date, including their years of professional experience, seniority level, results obtained in the Code Challenge and Technical Interview, and final hiring outcome (`is_hired`).
 
 Granularity is defined at the **individual candidate application level**, covering both hired and not-hired candidates, allowing metrics such as candidate count, hire count, and hiring rate to be calculated, as well as analysis of technical assessment performance.
 
@@ -100,7 +99,7 @@ Granularity is defined at the **individual candidate application level**, coveri
 | DimTechnology | Which technical profiles generate the highest number of hired candidates? | `technology_key`, `technology_name` |
 | DimSeniority | Which candidates generate the highest number of hires, by professional seniority? | `seniority_key`, `seniority_level` |
 | DimCountry | What differences exist between geographic regions? | `country_key`, `country_name` |
-| DimCandidate | What hiring trends and proportions exist by estimated gender? | `candidate_key`, `first_name`, `last_name`, `email`, `estimated_gender` |
+| DimCandidate | Which candidates submitted applications? | `candidate_key`, `first_name`, `last_name`, `email` |
 
 ### Facts (FactApplication)
 
@@ -110,10 +109,7 @@ Granularity is defined at the **individual candidate application level**, coveri
 | technical_interview_score | Candidate's technical performance in the interview | Source data |
 | yoe | Numeric value representing the candidate's years of experience | Source data |
 | is_hired | Determines whether the candidate is hired or not | `code_challenge_score ≥ 7 AND technical_interview_score ≥ 7` |
-| score_gap | Difference between the candidate's two evaluation scores | `code_challenge_score − technical_interview_score` |
-| cantidad_candidatos | Count measure to identify the number of candidates who applied | `SUM(cantidad_candidatos)` |
-| cantidad_contrataciones | Count measure to identify the number of hires made | `SUM(cantidad_contrataciones)` |
-| proporcion_contratados | Measure evaluating the hiring proportion | `cantidad_contrataciones / cantidad_candidatos` |
+| score_gap | Difference between the candidate's two evaluation scores | `technical_interview_score − code_challenge_score` |
 
 ## 11. ETL Architecture
 
@@ -125,12 +121,12 @@ Granularity is defined at the **individual candidate application level**, coveri
 | Decision | Rationale |
 |---|---|
 | Application Date as String to DateTime | Standardize date format for proper time-series analysis and dimensional aggregation |
-| Gender Estimation (UNKNOWN) | All candidates marked as UNKNOWN due to Genderize API rate limitations; structure supports future gender data enrichment |
 | IS_HIRED Business Rule | Implemented as `code_challenge_score ≥ 7 AND technical_interview_score ≥ 7` for consistent hiring classification |
 | Slowly Changing Dimensions (SCD) | Dimension tables implement SCD Type 1 (overwrite) since candidate attributes are assumed stable |
-| Additive Facts | All measures in FactApplication are additive, allowing direct aggregation across dimensions |
+| Derived metrics | Application and hire counts are calculated with `COUNT(*)` and `SUM(is_hired)`; hiring rate is derived from those results |
 | Surrogate Keys | Auto-increment INT keys on all dimensions for efficient FK relationships |
-| Score Gap Calculation | Pre-calculated in ETL (`code_challenge_score - technical_interview_score`) to support evaluation gap analysis |
+| Candidate Identity | Candidate identity is built from the normalized combination of `first_name`, `last_name`, and `email`; the resulting candidate ID is used to resolve the candidate foreign key in `fact_application`, since email is not unique |
+| Score Gap Calculation | Generated in the database (`technical_interview_score - code_challenge_score`) to support evaluation gap analysis |
 | Duplicate Records Handling | INSERT IGNORE used to prevent duplicate dimension entries while loading fact table |
 
 ## 13. Technologies
@@ -140,8 +136,8 @@ Granularity is defined at the **individual candidate application level**, coveri
 | **Data Processing** | Python | 3.11+ | ETL orchestration and data transformation |
 | | Pandas | 2.0.3 | Data manipulation and cleaning |
 | | NumPy | 1.24.3 | Numerical operations |
-| **Database** | MySQL | 8.0+ | Data warehouse (OLAP) |
-| | mysql-connector-python | 8.0.33 | Python-MySQL connectivity |
+| **Database** | PostgreSQL | 13+ | Data warehouse (OLAP) |
+| | psycopg2-binary | 2.9.9 | Python-PostgreSQL connectivity |
 | **Visualization** | Matplotlib | 3.7.2 | Static analytical plots |
 | | Seaborn | 0.12.2 | Statistical data visualization |
 | **Environment** | Python-dotenv | 1.0.0 | Environment variable management |
@@ -156,7 +152,7 @@ workshop-1/
 │   ├── extract.py                # Data extraction from CSV
 │   ├── clean.py                  # Data cleaning and transformation
 │   ├── dimensional_model.py      # Dimensional model creation
-│   ├── load.py                   # Data loading to MySQL
+│   ├── load.py                   # Data loading to PostgreSQL
 │   └── visualization.py          # Analytics and visualization generation
 ├── sql/
 │   ├── create_tables.sql         # Dimensional model DDL
@@ -179,8 +175,8 @@ workshop-1/
 ### Prerequisites
 
 - Python 3.11 or higher
-- MySQL Server 8.0 or higher (running on localhost:3307)
-- MySQL User: `root` with password `1234` (update in `src/load.py` and `src/dimensional_model.py` if needed)
+- PostgreSQL Server 13 or higher (running on localhost:5432)
+- PostgreSQL User: `postgres` with password `1234` (update in `src/config.py` if needed)
 
 ### Setup Instructions
 
@@ -197,10 +193,10 @@ cd workshop-1
 pip install -r requirements.txt
 ```
 
-**3. Ensure MySQL is running and accessible:**
+**3. Ensure PostgreSQL is running and accessible:**
 
 ```bash
-mysql -h localhost -P 3307 -u root -p
+psql -h localhost -p 5432 -U postgres -d postgres
 ```
 
 **4. Place source data in the correct location:**
@@ -246,7 +242,7 @@ After running the main pipeline, generate all analytical charts:
 python src/visualization.py
 ```
 
-This generates 6 comprehensive visualization sets in `results/visualizations/`.
+This generates 5 requirement-focused visualization sets in `results/visualizations/`.
 
 ## 15. Analytical Queries and Visualizations
 
@@ -290,7 +286,7 @@ This generates 6 comprehensive visualization sets in `results/visualizations/`.
 
 **Key Metrics:**
 - Hire count by seniority level and experience
-- Hiring rate by seniority level and experience (heatmap)
+- Hiring rate by seniority level and experience
 - Average technical performance by profile
 
 **Visualization:**
@@ -330,36 +326,21 @@ This generates 6 comprehensive visualization sets in `results/visualizations/`.
 
 ---
 
-### Query 6: Gender-Based Analysis (Bonus)
-
-**Purpose:** Analyze hiring trends and proportions by estimated gender.
-
-**Query:** Joins FactApplication with DimCandidate, grouping by gender_estimated, calculating hire count and rate.
-
-**Key Metrics:**
-- Candidate distribution by gender
-- Hire count and rate by gender
-- Average technical performance and experience by gender
-
-**Visualization:**
-![Gender-Based Analysis](./results/visualizations/06_genero.png)
-
----
 
 ### KPIs (derived from FactApplication measures)
 
 | KPI | Definition |
 |---|---|
-| Candidate count | `SUM(cantidad_candidatos)` |
-| Hire count | `SUM(cantidad_contrataciones)` |
-| Hiring rate | `cantidad_contrataciones / cantidad_candidatos` |
-| Score gap | `code_challenge_score − technical_interview_score` |
+| Candidate count | `COUNT(*)` |
+| Hire count | `SUM(is_hired)` |
+| Hiring rate | `SUM(is_hired) / COUNT(*)` |
+| Score gap | `technical_interview_score − code_challenge_score` |
 
 ## 16. Main Business Findings
 
 ### Summary of Key Insights
 
-Based on the 6 analytical queries and accompanying visualizations, the following business insights have been derived:
+Based on the 5 analytical queries and accompanying visualizations, the following business insights have been derived:
 
 #### **R1 - Hiring Trends Over Time**
 
@@ -391,19 +372,14 @@ A notable portion of candidates show consistent performance across both evaluati
 
 **Chart:** See `results/visualizations/05_diferencia_evaluaciones.png`
 
-#### **Bonus - Gender-Based Analysis**
-
-While all candidates are currently marked as gender UNKNOWN (due to API limitations), the analytical structure supports future gender-based equity analysis once gender data becomes available.
-
-**Chart:** See `results/visualizations/06_genero.png`
 
 
 ## 17. Final Requirements Validation
 
 | Requirement | Required Dimension(s) | Required Measure(s) | Validated? |
 |---|---|---|---|
-| R1 | DimDate | cantidad_contrataciones | ✅ Yes |
-| R2 | DimTechnology | proporcion_contratados | ✅ Yes |
-| R3 | DimSeniority | cantidad_contrataciones | ✅ Yes |
-| R4 | DimCountry | cantidad_contrataciones | ✅ Yes |
-| R5 | DimCandidate | cantidad_contrataciones | ✅ Yes |
+| R1 | DimDate | `COUNT(*)`, `SUM(is_hired)` | ✅ Yes |
+| R2 | DimTechnology | `COUNT(*)`, `SUM(is_hired)` | ✅ Yes |
+| R3 | DimSeniority | `COUNT(*)`, `SUM(is_hired)` | ✅ Yes |
+| R4 | DimCountry | `COUNT(*)`, `SUM(is_hired)` | ✅ Yes |
+| R5 | DimCandidate | `COUNT(*)`, `SUM(is_hired)` | ✅ Yes |

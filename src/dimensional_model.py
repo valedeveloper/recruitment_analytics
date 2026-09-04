@@ -1,17 +1,11 @@
 from pathlib import Path
-import mysql.connector
-from mysql.connector import Error
+import psycopg2
+from psycopg2 import Error
+from config import DB_CONFIG, DB_SERVER_CONFIG
 
 # Configuración de paths y base de datos
 PROJECT_ROOT = Path(__file__).parent.parent
 SQL_FILE_PATH = PROJECT_ROOT / "sql" / "create_tables.sql"
-
-DB_CONFIG = {
-    "host": "localhost",
-    "port": 3307,
-    "user": "root",
-    "password": "1234"
-}
 
 DB_NAME = "candidates"
 
@@ -29,17 +23,16 @@ def read_sql_file(file_path):
 def create_database_if_not_exists():
     """Crea la base de datos si no existe."""
     try:
-        config = DB_CONFIG.copy()
-        connection = mysql.connector.connect(**config)
-        
-        if connection.is_connected():
-            cursor = connection.cursor()
-            cursor.execute(f"CREATE DATABASE IF NOT EXISTS {DB_NAME}")
-            cursor.execute(f"USE {DB_NAME}")
-            connection.commit()
-            print(f"✓ Base de datos '{DB_NAME}' lista para usar\n")
-            cursor.close()
-            connection.close()
+        config = DB_SERVER_CONFIG.copy()
+        connection = psycopg2.connect(**config, database="postgres")
+        connection.autocommit = True
+        cursor = connection.cursor()
+        cursor.execute("SELECT 1 FROM pg_database WHERE datname = %s", (DB_NAME,))
+        if cursor.fetchone() is None:
+            cursor.execute(f'CREATE DATABASE "{DB_NAME}"')
+        print(f"✓ Base de datos '{DB_NAME}' lista para usar\n")
+        cursor.close()
+        connection.close()
     
     except Error as e:
         print(f"✗ Error al crear la base de datos: {e}")
@@ -55,41 +48,39 @@ def create_dimensional_tables():
         # Establecer conexión a la base de datos
         config = DB_CONFIG.copy()
         config["database"] = DB_NAME
-        connection = mysql.connector.connect(**config)
-        
-        if connection.is_connected():
-            print("✓ Conexión exitosa a la base de datos 'candidates'")
-            cursor = connection.cursor()
-            
-            # Leer los comandos SQL del archivo
-            sql_commands = read_sql_file(SQL_FILE_PATH)
-            print(f"✓ Archivo SQL leído: {len(sql_commands)} comandos encontrados\n")
-            
-            # Ejecutar cada comando SQL
-            for i, command in enumerate(sql_commands, 1):
-                try:
-                    cursor.execute(command)
-                    connection.commit()
-                    print(f"✓ Comando {i} ejecutado correctamente")
-                except Error as e:
-                    print(f"✗ Error en comando {i}: {e}")
-                    connection.rollback()
-            
-            print("\n✓ Todas las tablas han sido creadas exitosamente")
-            
-            # Verificar las tablas creadas
-            cursor.execute("SHOW TABLES")
-            tables = cursor.fetchall()
-            print(f"\nTablas en la base de datos:")
-            for table in tables:
-                print(f"  - {table[0]}")
+        connection = psycopg2.connect(**config)
+        print("✓ Conexión exitosa a la base de datos 'candidates'")
+        cursor = connection.cursor()
+
+        # Leer los comandos SQL del archivo
+        sql_commands = read_sql_file(SQL_FILE_PATH)
+        print(f"✓ Archivo SQL leído: {len(sql_commands)} comandos encontrados\n")
+
+        # Ejecutar cada comando SQL
+        for i, command in enumerate(sql_commands, 1):
+            try:
+                cursor.execute(command)
+                connection.commit()
+                print(f"✓ Comando {i} ejecutado correctamente")
+            except Error as e:
+                print(f"✗ Error en comando {i}: {e}")
+                connection.rollback()
+
+        print("\n✓ Todas las tablas han sido creadas exitosamente")
+
+        # Verificar las tablas creadas
+        cursor.execute("SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = 'public' ORDER BY tablename")
+        tables = cursor.fetchall()
+        print(f"\nTablas en la base de datos:")
+        for table in tables:
+            print(f"  - {table[0]}")
     
     except Error as e:
-        print(f"✗ Error de conexión a MySQL: {e}")
+        print(f"✗ Error de conexión a PostgreSQL: {e}")
     
     finally:
         # Cerrar la conexión
-        if 'connection' in locals() and connection.is_connected():
+        if 'connection' in locals() and not connection.closed:
             cursor.close()
             connection.close()
             print("\n✓ Conexión a la base de datos cerrada")

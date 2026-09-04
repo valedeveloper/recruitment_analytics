@@ -4,6 +4,7 @@ from clean import clean
 from extract import extract_file_to_csv
 from load import save_to_csv, load_all_dimensions_facts
 from dimensional_model import create_dimensional_tables
+from visualization import main as generate_visualizations
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -42,6 +43,10 @@ def main():
     # STEP 5: Carga a las dimensiones y fact table
     print("\nCargando datos al modelo dimensional...")
     load_all_dimensions_facts(df_candidates_cleaned)
+
+    # STEP 6: Generación de visualizaciones
+    print("\nGenerando visualizaciones...")
+    generate_visualizations()
 
 if __name__ == "__main__":
     main()
